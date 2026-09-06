@@ -13,16 +13,10 @@
     <property name="bottomMargin"><number>22</number></property>
     <item><widget class="QLabel" name="wordmark"><property name="text"><string>Octans</string></property></widget></item>
     <item><widget class="QPushButton" name="newCaptureButton"><property name="text"><string>New capture</string></property><property name="accessibleName"><string>New capture</string></property></widget></item>
-    <item><widget class="QPushButton" name="presetToggle"><property name="text"><string>Capture with preset  +</string></property><property name="accessibleName"><string>Capture with preset</string></property><property name="accessibleDescription"><string>Show or hide the available capture presets.</string></property><property name="checkable"><bool>true</bool></property></widget></item>
-    <item><widget class="QWidget" name="presetPanel"><layout class="QHBoxLayout" name="presetLayout">
-     <property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property><property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property>
-     <item><widget class="QPushButton" name="invertButton"><property name="text"><string>Invert</string></property><property name="accessibleName"><string>Capture with Invert preset</string></property></widget></item>
-     <item><widget class="QPushButton" name="grayscaleButton"><property name="text"><string>Grayscale</string></property><property name="accessibleName"><string>Capture with Grayscale preset</string></property></widget></item>
-    </layout></widget></item>
    </layout>
   </widget>
  </widget>
- <tabstops><tabstop>newCaptureButton</tabstop><tabstop>presetToggle</tabstop><tabstop>invertButton</tabstop><tabstop>grayscaleButton</tabstop></tabstops>
+ <tabstops><tabstop>newCaptureButton</tabstop></tabstops>
  <resources/>
  <connections/>
 </ui>
