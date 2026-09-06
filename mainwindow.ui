@@ -12,7 +12,7 @@
     <property name="rightMargin"><number>26</number></property>
     <property name="bottomMargin"><number>22</number></property>
     <item><widget class="QLabel" name="wordmark"><property name="text"><string>Octans</string></property></widget></item>
-    <item><widget class="QPushButton" name="newCaptureButton"><property name="text"><string>New capture</string></property><property name="accessibleName"><string>New capture</string></property></widget></item>
+    <item><widget class="QPushButton" name="newCaptureButton"><property name="text"><string>Capture</string></property><property name="accessibleName"><string>New capture</string></property></widget></item>
    </layout>
   </widget>
  </widget>
