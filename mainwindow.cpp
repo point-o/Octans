@@ -15,27 +15,6 @@
 #endif
 
 namespace {
-class StickerDot final : public QWidget
-{
-public:
-    StickerDot(const QColor &color, QWidget *parent) : QWidget(parent), color(color)
-    {
-        setAttribute(Qt::WA_TransparentForMouseEvents);
-        setFocusPolicy(Qt::NoFocus);
-    }
-protected:
-    void paintEvent(QPaintEvent *) override
-    {
-        QPainter p(this);
-        p.setRenderHint(QPainter::Antialiasing);
-        p.setPen(Qt::NoPen);
-        p.setBrush(color);
-        p.drawEllipse(QRectF(rect()).adjusted(1, 1, -1, -1));
-    }
-private:
-    QColor color;
-};
-
 // Decorative, unfocusable vector artwork; coordinates from the approved study.
 class Constellation final : public QWidget
 {
@@ -121,15 +100,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     auto *sky = new Constellation(ui->centralwidget);
     sky->setObjectName(QStringLiteral("constellation"));
     ui->launchLayout->insertWidget(1, sky, 1);
-    auto *stickerRow = new QWidget(ui->centralwidget);
-    stickerRow->setObjectName(QStringLiteral("stickerRow"));
-    auto *stickerLayout = new QHBoxLayout(stickerRow);
-    stickerLayout->setContentsMargins(0, 0, 0, 0);
-    stickerLayout->addStretch();
-    for (const auto &color : {QColor("#27964a"), QColor("#e64032"), QColor("#285ed6")})
-        stickerLayout->addWidget(new StickerDot(color, stickerRow));
-    stickerLayout->addStretch();
-    ui->launchLayout->insertWidget(2, stickerRow);
     connect(ui->newCaptureButton, &QPushButton::clicked, this, &MainWindow::showCaptureUnavailable);
     updateAppearance();
     resize(size().expandedTo(minimumSizeHint()));
@@ -170,7 +140,6 @@ void MainWindow::updateAppearance()
     if (title.pointSizeF() > 0) title.setPointSizeF(title.pointSizeF() * 2.71875);
     else title.setPixelSize(qRound(title.pixelSize() * 2.71875));
     title.setBold(true);
-    title.setStyle(QFont::StyleOblique);
     ui->wordmark->setFont(title);
     auto *closeButton = ui->centralwidget->findChild<QPushButton *>(QStringLiteral("closeWindowButton"));
     QFont closeFont = QApplication::font();
@@ -184,18 +153,15 @@ void MainWindow::updateAppearance()
     const int closeExtent = std::max(44, closeMetrics.height() + 4);
     closeButton->setMinimumSize(closeExtent, closeExtent);
     closeButton->setCursor(Qt::PointingHandCursor);
-    ui->launchLayout->setContentsMargins(0, 0, 0, 0);
-    closeButton->parentWidget()->layout()->setContentsMargins(px(26), px(25), px(26), 0);
+    ui->launchLayout->setContentsMargins(px(26), px(25), px(26), px(26));
+    if (closeButton->parentWidget() && closeButton->parentWidget()->layout()) {
+        closeButton->parentWidget()->layout()->setContentsMargins(0, 0, 0, 0);
+    }
     ui->launchLayout->setSpacing(px(14));
-    auto *stickerRow = ui->centralwidget->findChild<QWidget *>(QStringLiteral("stickerRow"));
-    stickerRow->layout()->setSpacing(px(14));
-    const int dotSize = std::max(16, px(22));
-    for (auto *dot : stickerRow->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly))
-        dot->setFixedSize(dotSize, dotSize);
     auto *sky = ui->centralwidget->findChild<QWidget *>(QStringLiteral("constellation"));
     sky->setMinimumHeight(px(150));
     ui->newCaptureButton->setCursor(Qt::PointingHandCursor);
-    const int captureHeight = std::max(64, px(80));
+    const int captureHeight = std::max(48, px(56));
     ui->newCaptureButton->setMinimumHeight(captureHeight);
     QFont captureFont = QApplication::font();
     captureFont.setFamily(QStringLiteral("Bahnschrift"));
@@ -215,11 +181,12 @@ void MainWindow::updateAppearance()
         "QLabel#wordmark { color: %3; }"
         "QPushButton { color: %1; background: %2;"
         " border: 2px solid transparent; padding: 8px 12px; text-align: left; }"
-        "QPushButton#newCaptureButton { background: %4; border-radius: 0; padding: 0 12px; text-align: center; }"
+        "QPushButton#newCaptureButton { background: %4; border: 2px solid %1; border-radius: 0; padding: 0 12px; text-align: center; }"
         "QPushButton#closeWindowButton { text-align: center; padding: 0; }"
         "QPushButton:hover, QPushButton:pressed { background: %1; color: %2; border-radius: 10px; }"
         "QPushButton#newCaptureButton:hover, QPushButton#newCaptureButton:pressed { background: %1; color: %2; }"
-        "QPushButton:focus { text-decoration: underline; }")
+        "QPushButton:focus { text-decoration: underline; }"
+        "QPushButton#newCaptureButton:focus { text-decoration: none; }")
         .arg(colors.color(QPalette::ButtonText).name(), colors.color(QPalette::Button).name(),
              colors.color(QPalette::WindowText).name(), captureBackground.name()));
     ui->newCaptureButton->setPalette(colors);
