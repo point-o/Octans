@@ -12,12 +12,14 @@ SOURCES += \
     main.cpp \
     mainwindow.cpp \
     captureflow.cpp \
-    desktopcapture.cpp
+    desktopcapture.cpp \
+    pixeltransform.cpp
 
 HEADERS += \
     mainwindow.h \
     captureflow.h \
-    desktopcapture.h
+    desktopcapture.h \
+    pixeltransform.h
 
 win32: LIBS += -lgdi32 -luser32
 

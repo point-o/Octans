@@ -51,9 +51,12 @@ void DesktopCapture::run()
         }
         GdiFlush();
         // Copy only the selected region. One queued image maximum; the DIB is reused.
-        const QImage frame = QImage(static_cast<const uchar *>(bits), area.width(), area.height(),
+        QImage frame = QImage(static_cast<const uchar *>(bits), area.width(), area.height(),
                                     area.width() * 4, QImage::Format_RGB32).copy();
         if (frame.isNull()) { failure = tr("Desktop capture ran out of image memory."); break; }
+        if (!PixelTransform::applyInPlace(frame, mode.load())) {
+            failure = tr("The selected pixel transform could not process this image."); break;
+        }
         pending.store(true);
         emit frameReady(frame, area);
         msleep(100); // Modest 10 FPS prototype, independent of UI event handling.

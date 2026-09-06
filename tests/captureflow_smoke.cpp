@@ -7,6 +7,7 @@
 #include <QSignalSpy>
 #include <QPointer>
 #include <QFontDatabase>
+#include <QtMath>
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
 #endif
@@ -32,8 +33,22 @@ int main(int argc,char **argv) {
  check(region.size()==QSize(201,161)); check(preview->geometry()==region);
  check(preview->windowFlags().testFlag(Qt::WindowTransparentForInput));
  check(preview->windowFlags().testFlag(Qt::WindowDoesNotAcceptFocus));
- check(preview->grab().toImage().pixelColor(100,100).alpha()==90);
+ check(preview->grab().toImage().pixelColor(100,100).alpha()==0);
+ const QImage outline=preview->grab().toImage();
+ check(outline.pixelColor(0,0).alpha()==0);
+ check(outline.pixelColor(qFloor(100*outline.devicePixelRatio()),qFloor(0.5*outline.devicePixelRatio()))==QColor(Qt::black));
+ check(outline.pixelColor(qFloor(100*outline.devicePixelRatio()),qFloor(1.5*outline.devicePixelRatio()))==QColor(Qt::white));
  preview->grab().save("capture-test.png");
+ check(preview->findChild<ModePopup *>("simulationMenu"));
+ check(preview->findChild<ModeCircleButton *>("modeProtanopia"));
+ check(preview->findChild<ModeCircleButton *>("modeDeuteranopia"));
+ check(preview->findChild<ModeCircleButton *>("modeTritanopia"));
+ auto *toggleHandle=preview->findChild<CaptureHandle *>("captureHandle");
+ auto *togglePopup=preview->findChild<ModePopup *>("simulationMenu");
+ toggleHandle->click(); app.processEvents(); check(togglePopup->isVisible());
+ toggleHandle->click(); app.processEvents(); check(!togglePopup->isVisible());
+ toggleHandle->click(); app.processEvents(); check(togglePopup->isVisible());
+ toggleHandle->click(); app.processEvents(); check(!togglePopup->isVisible());
 #ifdef Q_OS_WIN
  if (app.platformName()==QStringLiteral("windows")) {
      const HWND surface=reinterpret_cast<HWND>(preview->winId());
@@ -48,10 +63,42 @@ int main(int argc,char **argv) {
      backing.setColor(QPalette::Window,QColor(160,60,40)); underlying.setPalette(backing);
      QTest::qWait(400);
      check(qvariant_cast<QImage>(frames.last().at(0)).pixelColor(70,70)==QColor(160,60,40));
- }
+     auto *modeHandle=preview->findChild<CaptureHandle *>("captureHandle"); check(modeHandle);
+     auto *popup=preview->findChild<ModePopup *>("simulationMenu"); check(popup);
+     // Arrow keys navigate the popup; Return activates the focused circle (tritanopia).
+     modeHandle->click(); app.processEvents(); check(popup->isVisible());
+     QTest::keyClick(popup,Qt::Key_Down);
+     QTest::keyClick(popup,Qt::Key_Down);
+     QTest::keyClick(popup,Qt::Key_Down);
+     QTest::keyClick(popup->focusWidget(),Qt::Key_Return); QTest::qWait(350);
+     QImage tritanExpected(1,1,QImage::Format_RGB32); tritanExpected.fill(QColor(160,60,40));
+     check(PixelTransform::applyInPlace(tritanExpected,PixelTransform::Mode::Tritanopia));
+     check(qvariant_cast<QImage>(frames.last().at(0)).pixelColor(70,70)==tritanExpected.pixelColor(0,0));
+     check(modeHandle->mode()==PixelTransform::Mode::Tritanopia);
+     const char *modeButtons[]={"modeProtanopia","modeDeuteranopia","modeTritanopia"};
+     for (int mode=1;mode<=3;++mode) {
+         QImage expected(1,1,QImage::Format_RGB32); expected.fill(QColor(160,60,40));
+         check(PixelTransform::applyInPlace(expected,static_cast<PixelTransform::Mode>(mode)));
+         auto *button=preview->findChild<ModeCircleButton *>(modeButtons[mode-1]); check(button);
+         modeHandle->click(); app.processEvents(); check(popup->isVisible());
+         check(button->mode()==static_cast<PixelTransform::Mode>(mode));
+         button->click(); QTest::qWait(350);
+         check(!popup->isVisible());
+         check(qvariant_cast<QImage>(frames.last().at(0)).pixelColor(70,70)==expected.pixelColor(0,0));
+         check(modeHandle->mode()==static_cast<PixelTransform::Mode>(mode));
+     }
+// Clicking the active circle toggles back to Original.
+      auto *active=preview->findChild<ModeCircleButton *>("modeTritanopia"); check(active);
+      modeHandle->click(); app.processEvents();
+      active->click(); QTest::qWait(250);
+      check(qvariant_cast<QImage>(frames.last().at(0)).pixelColor(70,70)==QColor(160,60,40));
+      check(modeHandle->mode()==PixelTransform::Mode::Original);
+  }
 #endif
  auto *handle=preview->findChild<QPushButton *>("captureHandle"); const QPoint old=preview->pos();
+ const QImage beforeMove=preview->grab().toImage();
  QTest::keyClick(handle,Qt::Key_Right); check(preview->pos()==old+QPoint(10,0));
+ check(preview->grab().toImage().pixelColor(100,100)==beforeMove.pixelColor(100,100));
  auto *controls=preview->findChild<QWidget *>("captureControls");
  check(controls->pos()==preview->pos()); check(!controls->mask().contains(QPoint(100,20)));
  check(handle->geometry()==QRect(0,0,44,44));

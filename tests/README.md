@@ -5,9 +5,11 @@ Build `tests/captureflow.pro` with qmake in a separate build directory, then run
 
 Checks cover cancellation and launcher restoration, reverse-direction selection,
 region placement, moving through the handle's arrow keys, accidental clicks,
-keyboard selection, input-transparency flags, control placement, and preview close.
-The executable exits unsuccessfully on a failed check and writes selection-test.png
-and capture-test.png in its working directory for inspection.
+keyboard selection, input-transparency flags, control placement, preview close,
+and the circle-based simulation picker (three P/D/T circles opened by clicking
+the handle, with arrow-key navigation and toggle-back-to-Original on the active
+circle). The executable exits unsuccessfully on a failed check and writes
+selection-test.png and capture-test.png in its working directory for inspection.
 
 With `QT_QPA_PLATFORM=windows`, the executable briefly opens native windows. It
 also checks native no-activation/input-transparency flags and hit-testing, then
