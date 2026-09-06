@@ -10,10 +10,16 @@ CONFIG += c++17
 
 SOURCES += \
     main.cpp \
-    mainwindow.cpp
+    mainwindow.cpp \
+    captureflow.cpp \
+    desktopcapture.cpp
 
 HEADERS += \
-    mainwindow.h
+    mainwindow.h \
+    captureflow.h \
+    desktopcapture.h
+
+win32: LIBS += -lgdi32 -luser32
 
 FORMS += \
     mainwindow.ui

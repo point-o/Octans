@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "captureflow.h"
 #include "ui_mainwindow.h"
 
 #include <QApplication>
@@ -100,7 +101,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     auto *sky = new Constellation(ui->centralwidget);
     sky->setObjectName(QStringLiteral("constellation"));
     ui->launchLayout->insertWidget(1, sky, 1);
-    connect(ui->newCaptureButton, &QPushButton::clicked, this, &MainWindow::showCaptureUnavailable);
+    connect(ui->newCaptureButton, &QPushButton::clicked, this, &MainWindow::startCapture);
     updateAppearance();
     resize(size().expandedTo(minimumSizeHint()));
 #ifdef Q_OS_WIN
@@ -115,9 +116,21 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
 MainWindow::~MainWindow() { delete ui; }
 
-void MainWindow::showCaptureUnavailable()
+void MainWindow::startCapture()
 {
-    QMessageBox::information(this, tr("Capture"), tr("Capture selection is not implemented yet."));
+    auto *selector = new CaptureSelector(this);
+    const auto restore = [this] { show(); raise(); activateWindow(); };
+    connect(selector, &CaptureSelector::canceled, this, restore);
+    connect(selector, &CaptureSelector::regionSelected, this, [this, restore](const QRect &region) {
+        auto *preview = new CapturePreview(region, this);
+        connect(preview, &QObject::destroyed, this, restore);
+        preview->show();
+    });
+    hide();
+    selector->show();
+    selector->raise();
+    selector->activateWindow();
+    selector->setFocus();
 }
 
 void MainWindow::updateAppearance()

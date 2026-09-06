@@ -22,7 +22,7 @@ protected:
 #endif
 private:
     void updateAppearance();
-    void showCaptureUnavailable();
+    void startCapture();
     Ui::MainWindow *ui;
 };
 #endif
