@@ -7,7 +7,6 @@
 #include <QFontMetrics>
 #include <QMessageBox>
 #include <QPainter>
-#include <QPainterPath>
 #include <QTimer>
 #include <QHBoxLayout>
 #include <algorithm>
@@ -16,51 +15,63 @@
 #endif
 
 namespace {
-// Decorative, unfocusable vector artwork; coordinates from the approved study.
-class Constellation final : public QWidget
+// Decorative, unfocusable launcher artwork: the Octans logo image. Under
+// Windows high-contrast mode the opaque pixels are recolored to WindowText so
+// the mark stays visible on the high-contrast background.
+class OctansLogo final : public QWidget
 {
 public:
-    explicit Constellation(QWidget *parent) : QWidget(parent)
+    explicit OctansLogo(QWidget *parent) : QWidget(parent)
     {
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         setAttribute(Qt::WA_TransparentForMouseEvents);
     }
-    void setInk(const QColor &color) { ink = color; update(); }
+    void setTint(const QColor &color)
+    {
+        tint = color;
+        tinted = QPixmap();
+        render.clear();
+        update();
+    }
 protected:
     void paintEvent(QPaintEvent *) override
     {
+        const QPixmap base = tintedPixmap();
+        if (base.isNull())
+            return;
+        const QSize target = size() * devicePixelRatioF();
+        if (render.size != target) {
+            render.pixmap = base.scaled(target, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            render.size = target;
+        }
         QPainter p(this);
-        p.setRenderHint(QPainter::Antialiasing);
-        const qreal fontScale = QFontMetrics(font()).height() / 19.0;
-        const qreal scale = std::min({width() * .85 / 280.0,
-                                     height() / 250.0, 235.0 * fontScale / 280.0});
-        p.translate((width() - 280 * scale) / 2, (height() - 250 * scale) / 2);
-        p.scale(scale, scale);
-        QPainterPath lines;
-        lines.moveTo(34, 54);
-        lines.lineTo(111, 85);
-        lines.lineTo(144, 18);
-        lines.lineTo(247, 226);
-        lines.lineTo(111, 85);
-        p.setPen(QPen(ink, 1.3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-        p.drawPath(lines);
-        const auto star = [this, &p](qreal x, qreal y, qreal r, qreal inner) {
-            QPainterPath path;
-            path.moveTo(x, y-r);
-            path.lineTo(x+inner, y-inner); path.lineTo(x+r, y);
-            path.lineTo(x+inner, y+inner); path.lineTo(x, y+r);
-            path.lineTo(x-inner, y+inner); path.lineTo(x-r, y);
-            path.lineTo(x-inner, y-inner); path.closeSubpath();
-            p.setPen(Qt::NoPen);
-            p.setBrush(ink);
-            p.drawPath(path);
-        };
-
-        star(34,54,9,2.5); star(111,85,9,2.5); star(144,18,11,3);
-        star(247,226,9,2.5); star(139,188,6,1.8);
+        const qreal ratio = qreal(render.pixmap.devicePixelRatio());
+        const QPointF origin((width() - render.pixmap.width() / ratio) / 2,
+                             (height() - render.pixmap.height() / ratio) / 2);
+        p.drawPixmap(origin, render.pixmap);
     }
 private:
-    QColor ink = Qt::black;
+    QPixmap tintedPixmap()
+    {
+        if (source.isNull()) {
+            source.load(QStringLiteral(":/images/OctansLogo.png"));
+            source.setDevicePixelRatio(1.0);
+        }
+        if (!tint.isValid() || tint.alpha() == 0)
+            return source;
+        if (tinted.isNull()) {
+            tinted = source;
+            QPainter p(&tinted);
+            p.setCompositionMode(QPainter::CompositionMode_SourceIn);
+            p.fillRect(tinted.rect(), tint);
+            p.end();
+        }
+        return tinted;
+    }
+    QPixmap source;
+    QPixmap tinted;
+    QColor tint;
+    struct Render { QPixmap pixmap; QSize size; void clear() { pixmap = QPixmap(); size = QSize(); } } render;
 };
 
 bool highContrastEnabled()
@@ -98,8 +109,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(closeButton, &QPushButton::clicked, this, &QWidget::close);
     ui->launchLayout->insertWidget(0, header);
     setTabOrder(ui->newCaptureButton, closeButton);
-    auto *sky = new Constellation(ui->centralwidget);
-    sky->setObjectName(QStringLiteral("constellation"));
+    auto *sky = new OctansLogo(ui->centralwidget);
+    sky->setObjectName(QStringLiteral("octansLogo"));
     ui->launchLayout->insertWidget(1, sky, 1);
     connect(ui->newCaptureButton, &QPushButton::clicked, this, &MainWindow::startCapture);
     updateAppearance();
@@ -171,7 +182,7 @@ void MainWindow::updateAppearance()
         closeButton->parentWidget()->layout()->setContentsMargins(0, 0, 0, 0);
     }
     ui->launchLayout->setSpacing(px(14));
-    auto *sky = ui->centralwidget->findChild<QWidget *>(QStringLiteral("constellation"));
+    auto *sky = ui->centralwidget->findChild<QWidget *>(QStringLiteral("octansLogo"));
     sky->setMinimumHeight(px(150));
     ui->newCaptureButton->setCursor(Qt::PointingHandCursor);
     const int captureHeight = std::max(48, px(56));
@@ -203,7 +214,8 @@ void MainWindow::updateAppearance()
         .arg(colors.color(QPalette::ButtonText).name(), colors.color(QPalette::Button).name(),
              colors.color(QPalette::WindowText).name(), captureBackground.name()));
     ui->newCaptureButton->setPalette(colors);
-    static_cast<Constellation *>(sky)->setInk(colors.color(QPalette::WindowText));
+    static_cast<OctansLogo *>(sky)->setTint(highContrastEnabled()
+        ? colors.color(QPalette::WindowText) : QColor());
 }
 
 void MainWindow::changeEvent(QEvent *event)

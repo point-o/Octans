@@ -4,7 +4,7 @@ Octans is a Windows desktop tool for inspecting screen content with color-vision
 simulations. Select a region of the desktop and view it through a live,
 click-through overlay while continuing to interact with the application beneath it.
 
-The launcher uses a yellow-and-black design, constellation artwork, and the bundled
+The launcher uses a yellow-and-black design, the Octans logo, and the bundled
 Space Grotesk font. Windows high-contrast colors are respected by the launcher.
 
 ## Use

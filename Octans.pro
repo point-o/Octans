@@ -29,7 +29,8 @@ FORMS += \
     mainwindow.ui
 
 RESOURCES += \
-    fonts.qrc
+    fonts.qrc \
+    images.qrc
 
 RC_ICONS = res/Octans.ico
 
