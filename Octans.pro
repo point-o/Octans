@@ -26,6 +26,11 @@ win32: LIBS += -lgdi32 -luser32
 FORMS += \
     mainwindow.ui
 
+RESOURCES += \
+    fonts.qrc
+
+RC_ICONS = res/Octans.ico
+
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin

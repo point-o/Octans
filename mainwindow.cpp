@@ -147,7 +147,7 @@ void MainWindow::updateAppearance()
     const qreal scale = QFontMetrics(QApplication::font()).height() / 19.0;
     const auto px = [scale](int value) { return qRound(value * scale); };
     QFont title = QApplication::font();
-    title.setFamily(QStringLiteral("Azo Sans"));
+    title.setFamily(QStringLiteral("Space Grotesk"));
     title.setStyleHint(QFont::SansSerif);
     title.setStretch(QFont::SemiExpanded);
     if (title.pointSizeF() > 0) title.setPointSizeF(title.pointSizeF() * 2.71875);
@@ -177,7 +177,7 @@ void MainWindow::updateAppearance()
     const int captureHeight = std::max(48, px(56));
     ui->newCaptureButton->setMinimumHeight(captureHeight);
     QFont captureFont = QApplication::font();
-    captureFont.setFamily(QStringLiteral("Azo Sans"));
+    captureFont.setFamily(QStringLiteral("Space Grotesk"));
     captureFont.setStyleHint(QFont::SansSerif);
     captureFont.setStretch(QFont::SemiExpanded);
     captureFont.setWeight(QFont::Bold);
