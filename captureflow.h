@@ -10,6 +10,7 @@
 class QKeyEvent;
 class QShowEvent;
 class QHideEvent;
+class QMenu;
 class DesktopCapture;
 
 class CaptureHandle final : public QPushButton
@@ -96,6 +97,7 @@ public:
     explicit CapturePreview(const QRect &region, QWidget *parent = nullptr);
     ~CapturePreview() override;
     void setSimulationMode(PixelTransform::Mode mode);
+    float alarmThreshold() const { return hazardThreshold; }
 protected:
     void paintEvent(QPaintEvent *) override;
     void resizeEvent(QResizeEvent *) override;
@@ -110,8 +112,9 @@ private:
     QRect physicalRegion() const;
     DesktopCapture *capture = nullptr;
     QImage frame;
-    std::vector<EdgeDetection::Region> hazardRegions;
+std::vector<EdgeDetection::Region> hazardRegions;
     bool hazardEnabled = false;
+    float hazardThreshold = EdgeDetection::DefaultAlarmThreshold;
     QString captureError;
 PixelTransform::Mode simulationMode = PixelTransform::Mode::Original;
     QWidget *controls;
@@ -119,6 +122,7 @@ PixelTransform::Mode simulationMode = PixelTransform::Mode::Original;
     ModePopup *modePopup = nullptr;
     QPushButton *closeButton;
     QPushButton *hazardButton = nullptr;
+    QMenu *hazardMenu = nullptr;
     QPushButton *resizeHandle = nullptr;
     QSize resizeStart;
     QPoint resizePress;

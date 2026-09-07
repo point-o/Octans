@@ -8,6 +8,9 @@
 #include <QMouseEvent>
 #include <QKeyEvent>
 #include <QCloseEvent>
+#include <QMenu>
+#include <QActionGroup>
+#include <QAction>
 #include <QPushButton>
 #include <QRegion>
 #include <QPainterPath>
@@ -402,6 +405,34 @@ handle->installEventFilter(this);
         if (capture) capture->setHazardEnabled(enabled);
         update();
     });
+    hazardMenu = new QMenu(tr("Hazard threshold"), controls);
+    hazardMenu->setObjectName(QStringLiteral("hazardThresholdMenu"));
+    auto *group = new QActionGroup(hazardMenu);
+    group->setExclusive(true);
+    const struct { const char *label; const char *tip; float value; } presets[] = {
+        {"2:1", "Default alarm: outline below 2:1", EdgeDetection::DefaultAlarmThreshold},
+        {"3:1", "WCAG graphics and large-text level", 3.0f},
+        {"4.5:1", "WCAG normal-text level", 4.5f}
+    };
+    for (const auto &preset : presets) {
+        QAction *action = hazardMenu->addAction(tr(preset.label));
+        action->setCheckable(true);
+        action->setChecked(preset.value == hazardThreshold);
+        action->setToolTip(tr(preset.tip));
+        action->setData(double(preset.value));
+        group->addAction(action);
+        connect(action, &QAction::triggered, this, [this, action, preset] {
+            if (!action->isChecked()) return;
+            hazardThreshold = preset.value;
+            update();
+        });
+    }
+    // Clicking toggles Hazard Mode; right-click picks the alarm threshold.
+    hazardButton->setToolTip(tr("Outline detected edges with contrast below the alarm level. Right-click to choose the level."));
+    hazardButton->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(hazardButton, &QPushButton::customContextMenuRequested, this, [this](const QPoint &pos) {
+        hazardMenu->popup(hazardButton->mapToGlobal(pos));
+    });
     setTabOrder(handle, hazardButton);
     setTabOrder(hazardButton, closeButton);
     resizeHandle = new QPushButton(QStringLiteral("↘"), controls);
@@ -450,21 +481,47 @@ void CapturePreview::paintEvent(QPaintEvent *)
     p.save();
     p.setClipPath(outline);
     if (!frame.isNull()) p.drawImage(rect(), frame);
-    if (hazardEnabled && !frame.isNull()) {
-        QPen hazardPen(Qt::red, 2);
-        hazardPen.setCosmetic(true);
-        p.setPen(hazardPen);
+if (hazardEnabled && !frame.isNull()) {
         p.setBrush(Qt::NoBrush);
         const qreal scaleX = qreal(width()) / frame.width();
         const qreal scaleY = qreal(height()) / frame.height();
+        struct Mark { QRectF rect; EdgeDetection::Severity severity; };
+        QVector<Mark> marks;
         for (const auto &region : hazardRegions) {
-            if (!(region.contrastRatio < EdgeDetection::ContrastAlarmThreshold)) continue;
+            const EdgeDetection::Severity severity = EdgeDetection::severityFor(
+                region.contrastRatio, region.indeterminate, hazardThreshold);
+            if (severity == EdgeDetection::Severity::Hidden) continue;
             // Region endpoints are inclusive frame pixels; scale with the same
             // frame being displayed, even while a newer geometry is requested.
             const QRect pixels(region.startPixel, region.endPixel);
             if (!pixels.isValid()) continue;
-            p.drawRect(QRectF(pixels.x() * scaleX, pixels.y() * scaleY,
-                              pixels.width() * scaleX, pixels.height() * scaleY));
+            marks.append({QRectF(pixels.x() * scaleX, pixels.y() * scaleY,
+                                 pixels.width() * scaleX, pixels.height() * scaleY),
+                          severity});
+        }
+        // Dual-tone strokes: the black underlay carries the geometry on any
+        // background and for any color-vision deficiency; the colored core
+        // carries severity for those with intact red-green and blue-yellow
+        // vision. Dashes mark boundaries the ratio cannot vouch for.
+        for (const Mark &mark : marks) {
+            const QRectF rect = mark.rect;
+            p.setBrush(Qt::NoBrush);
+            QPen core(Qt::red, 2, Qt::SolidLine);
+            QPen underlay(Qt::black, 4, Qt::SolidLine);
+            if (mark.severity == EdgeDetection::Severity::Critical) {
+                underlay.setWidthF(6);
+            } else if (mark.severity == EdgeDetection::Severity::Marginal) {
+                core = QPen(QColor(255, 165, 0), 2, Qt::SolidLine);
+            } else if (mark.severity == EdgeDetection::Severity::Indeterminate) {
+                underlay = QPen(Qt::black, 4, Qt::DashLine);
+                core = QPen(Qt::white, 2, Qt::DashLine);
+            }
+            underlay.setCosmetic(true);
+            core.setCosmetic(true);
+            p.setPen(underlay);
+            p.drawRect(rect);
+            p.setPen(core);
+            p.drawRect(rect);
         }
     }
     if (!captureError.isEmpty()) {

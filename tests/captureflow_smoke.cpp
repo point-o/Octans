@@ -7,7 +7,9 @@
 #include <QSignalSpy>
 #include <QPointer>
 #include <QFontDatabase>
+#include <QMenu>
 #include <QtMath>
+#include <algorithm>
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
 #endif
@@ -136,23 +138,44 @@ int main(int argc,char **argv) {
  check(controls->mask().contains(hazard->geometry().center()));
  hazard->click(); check(hazard->isChecked());
 EdgeDetection::Region low; low.startPixel=QPoint(20,60); low.endPixel=QPoint(59,89);
-    low.contrastRatio=EdgeDetection::ContrastAlarmThreshold*0.95f;
+    low.contrastRatio=EdgeDetection::DefaultAlarmThreshold*0.95f;
   EdgeDetection::Region high; high.startPixel=QPoint(90,60); high.endPixel=QPoint(129,89);
-    high.contrastRatio=EdgeDetection::ContrastAlarmThreshold*1.05f;
- regions={low,high};
- // Completed frame and its regions share coordinates, even after a resize.
- preview->resize(initialSize*2);
- check(QMetaObject::invokeMethod(preview,"presentFrame",Qt::DirectConnection,
-       Q_ARG(QImage,completed),Q_ARG(QRect,previousArea), Q_ARG(std::vector<EdgeDetection::Region>,regions)));
- const QImage marked=preview->grab().toImage();
- const auto pixelAt=[&](const QImage &image,int x,int y) {
-     return image.pixelColor(qRound(x*image.devicePixelRatio()),qRound(y*image.devicePixelRatio()));
- };
- check(pixelAt(marked,40,140)==QColor(Qt::red));
- check(pixelAt(marked,70,140)==QColor(Qt::blue)); // No fill.
- check(pixelAt(marked,180,140)==QColor(Qt::blue)); // Threshold excludes 2:1.
- check(!controls->mask().contains(QPoint(40,140)));
- hazard->click(); check(!hazard->isChecked());
+    high.contrastRatio=EdgeDetection::DefaultAlarmThreshold*1.05f;
+  regions={low,high};
+  // Completed frame and its regions share coordinates, even after a resize.
+  preview->resize(initialSize*2);
+  check(QMetaObject::invokeMethod(preview,"presentFrame",Qt::DirectConnection,
+        Q_ARG(QImage,completed),Q_ARG(QRect,previousArea), Q_ARG(std::vector<EdgeDetection::Region>,regions)));
+  const QImage marked=preview->grab().toImage();
+  const auto pixelAt=[&](const QImage &image,int x,int y) {
+      return image.pixelColor(qRound(x*image.devicePixelRatio()),qRound(y*image.devicePixelRatio()));
+  };
+  check(pixelAt(marked,40,140)==QColor(Qt::red)); // 1.9:1 alarm, red core at the stroke.
+  check(pixelAt(marked,70,140)==QColor(Qt::blue)); // No fill.
+  check(pixelAt(marked,180,140)==QColor(255,165,0)); // 2.1:1 sits in the 3:1 marginal band.
+  // Preset menu is exclusive and pushes the alarm threshold into paint.
+  auto *hazardMenu=preview->findChild<QMenu*>("hazardThresholdMenu");
+  check(hazardMenu && hazardMenu->actions().size()==3);
+  const auto active=std::find_if(hazardMenu->actions().begin(),hazardMenu->actions().end(),
+      [](const QAction *action){ return action->isChecked(); });
+  check(active!=hazardMenu->actions().end() && (*active)->data().toDouble()==2.0);
+  for (auto *action : hazardMenu->actions()) {
+      action->trigger();
+      check(preview->alarmThreshold()==float(action->data().toDouble()));
+  }
+  // At the 4.5:1 preset both regions are critical alarm; back at 2:1 the 2.1:1
+  // region returns to the marginal band.
+  check(QMetaObject::invokeMethod(preview,"presentFrame",Qt::DirectConnection,
+        Q_ARG(QImage,completed),Q_ARG(QRect,previousArea), Q_ARG(std::vector<EdgeDetection::Region>,regions)));
+  check(pixelAt(preview->grab().toImage(),40,140)==QColor(Qt::red));
+  check(pixelAt(preview->grab().toImage(),180,140)==QColor(Qt::red));
+  hazardMenu->actions().at(0)->trigger(); // Restore the 2:1 preset.
+  check(preview->alarmThreshold()==2.0f);
+  check(QMetaObject::invokeMethod(preview,"presentFrame",Qt::DirectConnection,
+        Q_ARG(QImage,completed),Q_ARG(QRect,previousArea), Q_ARG(std::vector<EdgeDetection::Region>,regions)));
+  check(pixelAt(preview->grab().toImage(),180,140)==QColor(255,165,0));
+  check(!controls->mask().contains(QPoint(40,140)));
+  hazard->click(); check(!hazard->isChecked());
  check(pixelAt(preview->grab().toImage(),40,140)==QColor(Qt::blue));
  // Late results cannot restore outlines after toggling off.
  check(QMetaObject::invokeMethod(preview,"presentFrame",Qt::DirectConnection,

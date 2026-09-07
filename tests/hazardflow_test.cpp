@@ -78,7 +78,7 @@ private slots:
                             QVERIFY(region.startPixel.y() >= 0);
                             QVERIFY(region.endPixel.y() < area.height());
                             QVERIFY(region.contrastRatio >= 1.0f);
-                            QVERIFY(region.contrastRatio < EdgeDetection::ContrastAlarmThreshold);
+                            QVERIFY(region.contrastRatio < EdgeDetection::DefaultAlarmThreshold);
                             found = true;
                         }
                     }

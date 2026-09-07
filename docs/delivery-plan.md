@@ -58,8 +58,9 @@ Implemented and integrated in the working tree:
   simulation transforms that owned image in place.
 - Live view: accepts completed frames during movement and resizing; bottom-right
   mouse/keyboard resize grip; consistent 88 x 72 minimum selection/view size.
-- Edge analysis: reusable independent analyzer, synthetic tests and CPU benchmarks;
-  compiled into the project but not invoked by live capture.
+- Edge analysis: reusable region analyzer, reliability classification, synthetic
+  tests and CPU benchmarks, integrated into live Hazard Mode with severity-graded,
+  CVD-safe outlines and selectable alarm presets (2:1 / 3:1 / 4.5:1).
 - Documentation: root README, expanded test instructions, edge-model description.
 
 Validation completed with Qt 6.10.2 / MinGW GCC 13.1 on Windows:

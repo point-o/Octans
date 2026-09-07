@@ -5,117 +5,6 @@
 class EdgeDetectionTest : public QObject {
     Q_OBJECT
 private slots:
-    void uniformAndTiny()
-    {
-        EdgeDetection::Analyzer analyzer;
-        for (QSize size : {QSize(1, 1), QSize(2, 8), QSize(20, 15)}) {
-            QImage image(size, QImage::Format_RGB32);
-            image.fill(Qt::gray);
-            QVERIFY(analyzer.analyze(image));
-            QCOMPARE(analyzer.size(), size);
-            for (const auto &s : analyzer.samples()) {
-                QCOMPARE(s.strength, 0.0f);
-                QCOMPARE(s.contrast, 1.0f);
-            }
-        }
-        QVERIFY(analyzer.analyze(QImage()));
-        QVERIFY(analyzer.samples().empty());
-    }
-
-    void stepsAndReuse()
-    {
-        EdgeDetection::Analyzer analyzer;
-        const EdgeDetection::Sample *storage = nullptr;
-        for (bool vertical : {true, false}) {
-            QImage image(9, 9, QImage::Format_RGB32);
-            for (int y = 0; y < 9; ++y)
-                for (int x = 0; x < 9; ++x)
-                    image.setPixel(x, y, (vertical ? x : y) < 4 ? qRgb(0,0,0) : qRgb(255,255,255));
-            const auto *input = image.constBits();
-            QVERIFY(analyzer.analyze(image));
-            QCOMPARE(input, image.constBits());
-            if (storage)
-                QCOMPARE(analyzer.samples().data(), storage);
-            storage = analyzer.samples().data();
-            for (int y = 0; y < 9; ++y) {
-                for (int x = 0; x < 9; ++x) {
-                    const bool edge = x > 0 && x < 8 && y > 0 && y < 8
-                        && ((vertical ? x : y) == 3 || (vertical ? x : y) == 4);
-                    const auto &s = analyzer.samples()[y * 9 + x];
-                    QVERIFY(qAbs(s.strength - (edge ? 0.70710678f : 0.0f)) < 0.00001f);
-                    QVERIFY(qAbs(s.contrast - (edge ? 21.0f : 1.0f)) < 0.00001f);
-                }
-            }
-        }
-    }
-
-    void alphaFormatsAndStride()
-    {
-        EdgeDetection::Analyzer analyzer;
-        std::array<QRgb, 35> pixels;
-        pixels.fill(qRgba(0,0,0,0));
-        QImage image(reinterpret_cast<uchar *>(pixels.data()), 5, 5, 7 * sizeof(QRgb), QImage::Format_ARGB32);
-        QVERIFY(analyzer.analyze(image));
-        for (const auto &s : analyzer.samples())
-            QCOMPARE(s.contrast, 1.0f); // All transparent pixels composite to white.
-        image.setPixel(3, 2, qRgba(0,0,0,128));
-        QVERIFY(analyzer.analyze(image));
-        const float expected = 1.05f / (1.0f - 128.0f / 255.0f + 0.05f);
-        QVERIFY(qAbs(analyzer.samples()[12].contrast - expected) < 0.00001f);
-        const auto *saved = analyzer.samples().data();
-        for (auto format : {QImage::Format_RGB888, QImage::Format_ARGB32_Premultiplied,
-                            QImage::Format_RGBA8888, QImage::Format_Grayscale8}) {
-            QVERIFY(!analyzer.analyze(QImage(4, 4, format)));
-            QCOMPARE(analyzer.size(), QSize(5, 5));
-            QCOMPARE(analyzer.samples().data(), saved);
-        }
-        for (int y = 0; y < 5; ++y) {
-            QCOMPARE(pixels[y * 7 + 5], qRgba(0,0,0,0));
-            QCOMPARE(pixels[y * 7 + 6], qRgba(0,0,0,0));
-        }
-    }
-
-    void linearLuminance()
-    {
-        QImage image(5, 5, QImage::Format_RGB32);
-        image.fill(Qt::black);
-        image.setPixel(3, 2, qRgb(128,128,128));
-        EdgeDetection::Analyzer analyzer;
-        QVERIFY(analyzer.analyze(image));
-        // Independent reference: sRGB 128 has linear luminance 0.2158605.
-        QVERIFY(qAbs(analyzer.samples()[12].contrast - 5.317210f) < 0.0001f);
-    }
-
-    void diagonal()
-    {
-        QImage image(7, 7, QImage::Format_RGB32);
-        for (int y = 0; y < 7; ++y)
-            for (int x = 0; x < 7; ++x)
-                image.setPixel(x, y, x + y < 6 ? qRgb(0,0,0) : qRgb(255,255,255));
-        EdgeDetection::Analyzer analyzer;
-        QVERIFY(analyzer.analyze(image));
-        QVERIFY(qAbs(analyzer.samples()[3 * 7 + 3].strength - 1.0f) < 0.00001f);
-        QVERIFY(qAbs(analyzer.samples()[3 * 7 + 3].contrast - 21.0f) < 0.00001f);
-    }
-
-    void benchmark_data()
-    {
-        QTest::addColumn<QSize>("size");
-        QTest::newRow("720p") << QSize(1280, 720);
-        QTest::newRow("1080p") << QSize(1920, 1080);
-    }
-    void benchmark()
-    {
-        QFETCH(QSize, size);
-        QImage image(size, QImage::Format_RGB32);
-        for (int y = 0; y < size.height(); ++y)
-            for (int x = 0; x < size.width(); ++x)
-                image.setPixel(x,y,qRgb(x % 256,y % 256,(x + y) % 256));
-        EdgeDetection::Analyzer analyzer;
-        QVERIFY(analyzer.analyze(image));
-        QBENCHMARK { analyzer.analyze(image); }
-    }
-
     void regionsFlatNoiseAndSeparate()
     {
         EdgeDetection::RegionAnalyzer analyzer;
@@ -147,6 +36,7 @@ private slots:
             QCOMPARE(region.color1, (std::array<quint8,3>{0,0,0}));
             QCOMPARE(region.color2, (std::array<quint8,3>{255,255,255}));
             QCOMPARE(region.contrastRatio, 21.0f);
+            QVERIFY(!region.indeterminate);
         }
         const auto *storage = analyzer.regions().data();
         QVERIFY(analyzer.analyze(image));
@@ -241,6 +131,65 @@ private slots:
         QCOMPARE(analyzer.regions().size(), EdgeDetection::RegionAnalyzer::MaximumRegions);
         QVERIFY(analyzer.analyze(QImage()));
         QVERIFY(analyzer.regions().empty());
+    }
+
+    void regionsReliability()
+    {
+        EdgeDetection::RegionAnalyzer analyzer;
+        // Solid black-on-white boundary: both sides have perfect color anchors.
+        QImage solid(20, 20, QImage::Format_RGB32);
+        for (int y = 0; y < 20; ++y)
+            for (int x = 0; x < 20; ++x)
+                solid.setPixel(x, y, x < 10 ? qRgb(0,0,0) : qRgb(255,255,255));
+        QVERIFY(analyzer.analyze(solid));
+        QCOMPARE(analyzer.regions().size(), size_t(1));
+        QVERIFY(!analyzer.regions()[0].indeterminate);
+        QCOMPARE(analyzer.regions()[0].contrastRatio, 21.0f);
+        // Wide luminance ramp: both sides are blend pixels with no anchor.
+        QImage ramp(40, 20, QImage::Format_RGB32);
+        for (int y = 0; y < ramp.height(); ++y)
+            for (int x = 0; x < ramp.width(); ++x)
+                ramp.setPixel(x, y, qRgb(x < 12 ? 255 : (x < 27 ? 255 - (x - 11) * 17 : 255),
+                                         0, 0));
+        QVERIFY(analyzer.analyze(ramp));
+        QCOMPARE(analyzer.regions().size(), size_t(1));
+        QVERIFY(analyzer.regions()[0].indeterminate);
+        // Narrow antialiased core still keeps a solid interior: a 3px gray stem
+        // (60) with single-pixel 150 ramps on a 255 background confirms at the
+        // 0.5 share, so its medians reflect the core and the ramp midpoint,
+        // not pure noise.
+        QImage core(40, 20, QImage::Format_RGB32);
+        for (int y = 0; y < core.height(); ++y)
+            for (int x = 0; x < core.width(); ++x) {
+                const int value = x < 13 ? 255 : x < 14 ? 150 : x < 17 ? 60
+                    : x < 18 ? 150 : 255;
+                core.setPixel(x, y, qRgb(value, 0, 0));
+            }
+        QVERIFY(analyzer.analyze(core));
+        QVERIFY(!analyzer.regions().empty());
+        const auto &r = analyzer.regions()[0];
+        QVERIFY(!r.indeterminate);
+        QCOMPARE(r.color1, (std::array<quint8,3>{60,0,0}));
+        QCOMPARE(r.color2, (std::array<quint8,3>{150,0,0}));
+        // Storage reuse: the region vector pointer stays stable across frames.
+        const auto *storage = analyzer.regions().data();
+        QVERIFY(analyzer.analyze(core));
+        QCOMPARE(analyzer.regions().data(), storage);
+    }
+
+    void severityClassifier()
+    {
+        constexpr float t = EdgeDetection::DefaultAlarmThreshold;
+        QCOMPARE(EdgeDetection::severityFor(0.8f, false, t), EdgeDetection::Severity::Critical);
+        QCOMPARE(EdgeDetection::severityFor(1.0f, false, t), EdgeDetection::Severity::Warn);
+        QCOMPARE(EdgeDetection::severityFor(1.9f, false, t), EdgeDetection::Severity::Warn);
+        QCOMPARE(EdgeDetection::severityFor(2.0f, false, t), EdgeDetection::Severity::Marginal);
+        QCOMPARE(EdgeDetection::severityFor(2.9f, false, t), EdgeDetection::Severity::Marginal);
+        QCOMPARE(EdgeDetection::severityFor(3.0f, false, t), EdgeDetection::Severity::Hidden);
+        QCOMPARE(EdgeDetection::severityFor(4.4f, false, 4.5f), EdgeDetection::Severity::Warn);
+        QCOMPARE(EdgeDetection::severityFor(4.5f, false, 4.5f), EdgeDetection::Severity::Hidden);
+        QCOMPARE(EdgeDetection::severityFor(0.5f, true, t), EdgeDetection::Severity::Indeterminate);
+        QCOMPARE(EdgeDetection::severityFor(9.0f, true, 4.5f), EdgeDetection::Severity::Indeterminate);
     }
 
     void regionBenchmark()

@@ -8,38 +8,34 @@
 
 namespace EdgeDetection {
 
-struct Sample {
-    float strength = 0.0f; // Normalized central luminance difference, [0, 1].
-    float contrast = 1.0f; // Opposing-neighbor luminance ratio, [1, 21].
-};
-
-// Reuse one Analyzer per worker. Input remains untouched. Samples are row-major
-// and remain valid until the next analyze() call. No per-edge allocations.
-// RGB32 and straight ARGB32 only; ARGB32 is composited onto opaque white in
-// linear light. Untagged input is assumed sRGB; no color-space conversion.
-class Analyzer {
-public:
-    bool analyze(const QImage &image);
-    QSize size() const { return m_size; }
-    const std::vector<Sample> &samples() const { return m_samples; }
-
-private:
-    QSize m_size;
-    std::vector<Sample> m_samples;
-    std::vector<float> m_rows;
-};
-
 struct Region {
     QPoint startPixel; // Inclusive bounding box in input-image coordinates.
     QPoint endPixel;
     std::array<quint8, 3> color1{}; // Raw channel-wise median RGB bytes.
     std::array<quint8, 3> color2{};
     float contrastRatio = 1.0f;
+    // True when neither edge side has a stable solid color anchor, so the
+    // medians come from blend ramps and contrastRatio is untrustworthy.
+    bool indeterminate = false;
 };
 
-// Hazard Mode outlines regions whose contrast ratio falls below this value.
-// Regions at or above the threshold are considered safely distinguishable.
-inline constexpr float ContrastAlarmThreshold = 2.0f;
+// Default Hazard Mode alarm: regions below this contrast ratio are outlined.
+// The UI offers 3:1 and 4.5:1 (WCAG graphics / text programs) as alternatives.
+inline constexpr float DefaultAlarmThreshold = 2.0f;
+
+// An edge side whose most common luminance bin holds at least this share of
+// the side's pixels has a solid color anchor; otherwise the boundary is a
+// blend ramp (thin text, gradients) and the ratio cannot be trusted.
+inline constexpr float MinimumDominantShare = 0.45f;
+
+// Severity for one region, derived from its contrast ratio relative to the
+// chosen alarm threshold. Severity::Indeterminate overrides all ratio bands.
+enum class Severity { Hidden, Marginal, Warn, Critical, Indeterminate };
+
+// Pure classifier: hidden above 3:1, marginal below the 3:1 graphics level,
+// warn at/below the threshold, critical below half the threshold. Indeterminate
+// regions always classify as Severity::Indeterminate regardless of ratio.
+Severity severityFor(float contrastRatio, bool indeterminate, float threshold);
 
 // Analyze the already simulated, caller-sized RGB32 image. No rescaling or input
 // mutation. Connected RGB edges retain low-contrast and equal-luminance colors.

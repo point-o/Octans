@@ -5,71 +5,6 @@
 #include <cmath>
 
 namespace EdgeDetection {
-namespace {
-const std::array<float, 256> &linearTable()
-{
-    static const auto table = [] {
-        std::array<float, 256> values{};
-        for (int i = 0; i < 256; ++i) {
-            const float v = i / 255.0f;
-            values[i] = v <= 0.04045f ? v / 12.92f
-                                     : std::pow((v + 0.055f) / 1.055f, 2.4f);
-        }
-        return values;
-    }();
-    return table;
-}
-}
-
-bool Analyzer::analyze(const QImage &image)
-{
-    if (!image.isNull() && image.format() != QImage::Format_RGB32
-            && image.format() != QImage::Format_ARGB32)
-        return false; // Keep the last valid result on unsupported input.
-
-    m_size = image.size();
-    const int width = image.width();
-    const int height = image.height();
-    m_samples.resize(size_t(width) * size_t(height));
-    std::fill(m_samples.begin(), m_samples.end(), Sample{});
-    if (width < 3 || height < 3)
-        return true;
-
-    m_rows.resize(size_t(width) * 3);
-    const auto &linear = linearTable();
-    const bool alpha = image.format() == QImage::Format_ARGB32;
-    auto loadRow = [&](int y) {
-        auto *out = m_rows.data() + size_t(y % 3) * width;
-        const auto *pixels = reinterpret_cast<const QRgb *>(image.constScanLine(y));
-        for (int x = 0; x < width; ++x) {
-            const QRgb p = pixels[x];
-            const float luminance = 0.2126f * linear[qRed(p)]
-                + 0.7152f * linear[qGreen(p)] + 0.0722f * linear[qBlue(p)];
-            const float a = alpha ? qAlpha(p) / 255.0f : 1.0f;
-            out[x] = a * luminance + (1.0f - a);
-        }
-    };
-    loadRow(0);
-    loadRow(1);
-    for (int y = 1; y < height - 1; ++y) {
-        loadRow(y + 1);
-        const auto *above = m_rows.data() + size_t((y - 1) % 3) * width;
-        const auto *row = m_rows.data() + size_t(y % 3) * width;
-        const auto *below = m_rows.data() + size_t((y + 1) % 3) * width;
-        auto *out = m_samples.data() + size_t(y) * width;
-        for (int x = 1; x < width - 1; ++x) {
-            const float dx = row[x + 1] - row[x - 1];
-            const float dy = below[x] - above[x];
-            const bool horizontal = std::abs(dx) >= std::abs(dy);
-            const float first = horizontal ? row[x - 1] : above[x];
-            const float second = horizontal ? row[x + 1] : below[x];
-            out[x].strength = std::sqrt(dx * dx + dy * dy) * 0.70710678118f;
-            out[x].contrast = (std::max(first, second) + 0.05f)
-                / (std::min(first, second) + 0.05f);
-        }
-    }
-    return true;
-}
 
 bool RegionAnalyzer::analyze(const QImage &image)
 {
@@ -108,8 +43,8 @@ bool RegionAnalyzer::analyze(const QImage &image)
                 m_edges[size_t(y) * width + x] = right >= below ? 1 : 2;
         }
     }
-    // This LUT intentionally follows the requested 0.03928 breakpoint, rather
-    // than the existing dense Analyzer's 0.04045 sRGB decoding breakpoint.
+    // This LUT intentionally follows the WCAG contrast recommendation's 0.03928
+    // sRGB breakpoint, so the reported ratios match standard contrast math.
     static const auto contrastLinear = [] {
         std::array<double, 256> table{};
         for (int i = 0; i < 256; ++i) {
@@ -118,9 +53,12 @@ bool RegionAnalyzer::analyze(const QImage &image)
         }
         return table;
     }();
-    auto luminance = [](const std::array<quint8, 3> &color) {
-        return 0.2126 * contrastLinear[color[0]] + 0.7152 * contrastLinear[color[1]]
-            + 0.0722 * contrastLinear[color[2]];
+    auto luminanceOf = [](QRgb color) {
+        return 0.2126 * contrastLinear[qRed(color)] + 0.7152 * contrastLinear[qGreen(color)]
+            + 0.0722 * contrastLinear[qBlue(color)];
+    };
+    auto luminance = [&](const std::array<quint8, 3> &color) {
+        return luminanceOf(qRgb(color[0], color[1], color[2]));
     };
     for (size_t start = 0; start < count && m_regions.size() < MaximumRegions; ++start) {
         if (!m_edges[start] || (m_edges[start] & 4))
@@ -144,6 +82,9 @@ bool RegionAnalyzer::analyze(const QImage &image)
         if (m_queue.size() < MinimumEdgePixels)
             continue;
         std::array<std::array<quint32, 256>, 6> histograms{};
+        // Side luminance spread decides whether a boundary has solid anchors
+        // on both sides. Quantized linear luminance, 64 bins over [0, 1).
+        std::array<std::array<quint32, 64>, 2> sideLuminance{};
         int left = width, top = height, right = 0, bottom = 0;
         for (quint32 index : m_queue) {
             const int x = int(index % width);
@@ -162,6 +103,10 @@ bool RegionAnalyzer::analyze(const QImage &image)
             ++histograms[3][qRed(b)];
             ++histograms[4][qGreen(b)];
             ++histograms[5][qBlue(b)];
+            sideLuminance[0][std::min(63, int(luminanceOf(a) * 64.0))]
+                += 1;
+            sideLuminance[1][std::min(63, int(luminanceOf(b) * 64.0))]
+                += 1;
             left = std::min(left, x);
             top = std::min(top, y);
             right = std::max(right, otherX);
@@ -170,6 +115,18 @@ bool RegionAnalyzer::analyze(const QImage &image)
         Region region;
         region.startPixel = QPoint(left, top);
         region.endPixel = QPoint(right, bottom);
+        // A side with a solid color anchors its median in that color: the most
+        // common luminance bin holds a clear majority. Blend ramps (thin text,
+        // gradients) spread pixels across many bins and cannot be trusted.
+        for (int side = 0; side < 2; ++side) {
+            quint32 total = 0, dominant = 0;
+            for (quint32 bin : sideLuminance[side]) {
+                total += bin;
+                dominant = std::max(dominant, bin);
+            }
+            region.indeterminate |= total > 0
+                && float(dominant) / float(total) < MinimumDominantShare;
+        }
         // Lower median for even sample counts keeps output in raw byte space.
         const quint32 rank = quint32((m_queue.size() - 1) / 2);
         for (size_t channel = 0; channel < 6; ++channel) {
@@ -189,5 +146,18 @@ bool RegionAnalyzer::analyze(const QImage &image)
         m_regions.push_back(region);
     }
     return true;
+}
+
+Severity severityFor(float contrastRatio, bool indeterminate, float threshold)
+{
+    if (indeterminate)
+        return Severity::Indeterminate;
+    if (contrastRatio < threshold * 0.5f)
+        return Severity::Critical;
+    if (contrastRatio < threshold)
+        return Severity::Warn;
+    if (contrastRatio < 3.0f)
+        return Severity::Marginal;
+    return Severity::Hidden;
 }
 } // namespace EdgeDetection

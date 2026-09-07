@@ -20,8 +20,10 @@ Space Grotesk font. Windows high-contrast colors are respected by the launcher.
 4. Drag the bottom-right resize grip to resize the live view. When that grip has
    focus, arrow keys adjust width or height in 10-pixel steps.
 5. Click **Hazard Mode**, beside the top-left handle, to outline detected edge
-   regions with contrast below **2:1** in red. Click again to hide the warnings.
-   Analysis uses the image after the selected color-vision simulation (or Original).
+   regions whose contrast is below the alarm level. The default alarm is **2:1**;
+   right-click the button to choose **3:1** or **4.5:1**. Click again to hide the
+   warnings. Analysis uses the image after the selected color-vision simulation
+   (or Original).
 6. Close the capture with its **×** control to return to the launcher.
 
 These simulations support visual inspection. They do not correct colors or predict
@@ -75,8 +77,11 @@ can appear while the next capture catches up to the current region.
 
 [Hazard analysis](docs/edge-detection.md) groups connected color boundaries into
 regions. Each region includes inclusive `startPixel` / `endPixel` bounds, two
-median RGB byte samples, and their luminance contrast ratio. Hazard Mode outlines
-regions below 2:1; it does not assign severity colors yet.
+median RGB byte samples, their luminance contrast ratio, and a reliability flag.
+Outlines are severity-graded with a dual-tone black-plus-color stroke so the
+geometry reads for every color-vision type: critical (below half the alarm),
+warn (below the alarm), marginal (below 3:1), and dashed "indeterminate" bands
+where neither side of the boundary has a solid color to trust.
 
 Analysis runs on the capture worker after color simulation, at most ten times per
 second on a reduced image no larger than 640 x 360. Its buffers are reused, and

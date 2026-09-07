@@ -16,7 +16,7 @@ Use the same pattern with the following projects and executables:
 | Project | Executable | Coverage |
 | --- | --- | --- |
 | `pixeltransform.pro` | `pixeltransform-test` | Known colors, neutral values, alpha, formats, shared-image isolation, in-place reuse, metadata, stride |
-| `edgedetection.pro` | `edgedetection-test` | Uniform fields, known edges, orientations, luminance, alpha, formats, stride, buffer reuse, CPU benchmarks |
+| `edgedetection.pro` | `edgedetection-test` | Uniform fields, known edges, orientations, raw medians, stride, buffer reuse, reliability classification, severity classifier, CPU benchmark |
 | `desktopcapture.pro` | `desktopcapture_test` | Windows GDI worker, acknowledgement backpressure, retained-frame safety, pool exhaustion/recovery, storage reuse, resizing |
 | `captureflow.pro` | `captureflow-smoke` | Selection, launcher restoration, picker, movement, resizing, input transparency, preview close |
 | `capture_pipeline_benchmark.pro` | `capture_pipeline_benchmark` | Preallocated copy-plus-transform timings, with a storage-reuse check |
@@ -61,9 +61,10 @@ The worker tests deliberately retain them to verify backpressure and immutabilit
 
 ## Benchmarks and manual checks
 
-Run `edgedetection-test benchmark -iterations 10 -o benchmark.txt,txt` for warmed
-720p and 1080p analysis timings. These measure CPU analysis only, not live capture
-FPS. See [the edge baseline](../docs/edge-detection.md) for interpretation.
+Run `edgedetection-test regionBenchmark -iterations 10 -o benchmark.txt,txt`
+for a warmed 640 x 360 analysis timing. This measures CPU region analysis only,
+not live capture FPS. See [the edge model](../docs/edge-detection.md) for
+interpretation.
 
 Run `capture_pipeline_benchmark results.txt` to measure a preallocated copy plus
 in-place simulation at 640 x 480 and 1920 x 1080, with five warmups and 30 measured
