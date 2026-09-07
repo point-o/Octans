@@ -14,7 +14,7 @@ struct Region {
     std::array<quint8, 3> color1{}; // Raw channel-wise median RGB bytes.
     std::array<quint8, 3> color2{};
     float contrastRatio = 1.0f;
-    // True when neither edge side has a stable solid color anchor, so the
+    // True when either edge side lacks sufficient stable solid color anchors, so the
     // medians come from blend ramps and contrastRatio is untrustworthy.
     bool indeterminate = false;
 };
@@ -32,9 +32,9 @@ inline constexpr float MinimumDominantShare = 0.45f;
 // chosen alarm threshold. Severity::Indeterminate overrides all ratio bands.
 enum class Severity { Hidden, Marginal, Warn, Critical, Indeterminate };
 
-// Pure classifier: hidden above 3:1, marginal below the 3:1 graphics level,
-// warn at/below the threshold, critical below half the threshold. Indeterminate
-// regions always classify as Severity::Indeterminate regardless of ratio.
+// Only trustworthy ratios strictly below the chosen threshold are visible.
+// Invalid/indeterminate measurements are hidden. Critical is below half the
+// threshold; all other visible results are Warn.
 Severity severityFor(float contrastRatio, bool indeterminate, float threshold);
 
 // Analyze the already simulated, caller-sized RGB32 image. No rescaling or input

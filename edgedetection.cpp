@@ -85,6 +85,20 @@ bool RegionAnalyzer::analyze(const QImage &image)
         // Side luminance spread decides whether a boundary has solid anchors
         // on both sides. Quantized linear luminance, 64 bins over [0, 1).
         std::array<std::array<quint32, 64>, 2> sideLuminance{};
+        size_t anchoredPairs = 0;
+        // Look past blend pixels for a short, stable plateau on each side.
+        // A bounded search avoids treating distant unrelated objects as anchors.
+        const auto anchor = [&](int x, int y, int dx, int dy, QRgb &color) {
+            color = pixel(x, y);
+            for (int step = 0; step < 4; ++step) {
+                const int nx = x + dx, ny = y + dy;
+                if (nx < 0 || nx >= width || ny < 0 || ny >= height) return false;
+                const QRgb next = pixel(nx, ny);
+                if (difference(color, next) <= 4) return true;
+                x = nx; y = ny; color = next;
+            }
+            return false;
+        };
         int left = width, top = height, right = 0, bottom = 0;
         for (quint32 index : m_queue) {
             const int x = int(index % width);
@@ -92,7 +106,10 @@ bool RegionAnalyzer::analyze(const QImage &image)
             const bool horizontal = (m_edges[index] & 3) == 1;
             const int otherX = x + int(horizontal);
             const int otherY = y + int(!horizontal);
-            QRgb a = pixel(x, y), b = pixel(otherX, otherY);
+            QRgb a, b;
+            const bool firstAnchored = anchor(x, y, -int(horizontal), -int(!horizontal), a);
+            const bool secondAnchored = anchor(otherX, otherY, int(horizontal), int(!horizontal), b);
+            if (firstAnchored && secondAnchored) ++anchoredPairs;
             // RGB numeric order is lexicographic R/G/B, independent of the
             // direction in which an outline happens to run.
             if (a > b)
@@ -115,6 +132,7 @@ bool RegionAnalyzer::analyze(const QImage &image)
         Region region;
         region.startPixel = QPoint(left, top);
         region.endPixel = QPoint(right, bottom);
+        region.indeterminate = double(anchoredPairs) / double(m_queue.size()) < 0.75;
         // A side with a solid color anchors its median in that color: the most
         // common luminance bin holds a clear majority. Blend ramps (thin text,
         // gradients) spread pixels across many bins and cannot be trusted.
@@ -150,14 +168,13 @@ bool RegionAnalyzer::analyze(const QImage &image)
 
 Severity severityFor(float contrastRatio, bool indeterminate, float threshold)
 {
-    if (indeterminate)
-        return Severity::Indeterminate;
+    if (indeterminate || !std::isfinite(contrastRatio) || contrastRatio < 1.0f
+        || !std::isfinite(threshold) || threshold <= 1.0f || contrastRatio >= threshold)
+        return Severity::Hidden;
     if (contrastRatio < threshold * 0.5f)
         return Severity::Critical;
     if (contrastRatio < threshold)
         return Severity::Warn;
-    if (contrastRatio < 3.0f)
-        return Severity::Marginal;
     return Severity::Hidden;
 }
 } // namespace EdgeDetection

@@ -80,8 +80,10 @@ regions. Each region includes inclusive `startPixel` / `endPixel` bounds, two
 median RGB byte samples, their luminance contrast ratio, and a reliability flag.
 Outlines are severity-graded with a dual-tone black-plus-color stroke so the
 geometry reads for every color-vision type: critical (below half the alarm),
-warn (below the alarm), marginal (below 3:1), and dashed "indeterminate" bands
-where neither side of the boundary has a solid color to trust.
+warn (below the alarm). The selected cutoff is a hard visibility limit;
+uncertain measurements stay hidden. Sampling looks past short antialiased ramps
+for nearby solid colors so a sharp, readable boundary does not become an alarm
+just because its transition contains blended pixels.
 
 Analysis runs on the capture worker after color simulation, at most ten times per
 second on a reduced image no larger than 640 x 360. Its buffers are reused, and

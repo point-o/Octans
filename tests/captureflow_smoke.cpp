@@ -152,7 +152,7 @@ EdgeDetection::Region low; low.startPixel=QPoint(20,60); low.endPixel=QPoint(59,
   };
   check(pixelAt(marked,40,140)==QColor(Qt::red)); // 1.9:1 alarm, red core at the stroke.
   check(pixelAt(marked,70,140)==QColor(Qt::blue)); // No fill.
-  check(pixelAt(marked,180,140)==QColor(255,165,0)); // 2.1:1 sits in the 3:1 marginal band.
+  check(pixelAt(marked,180,140)==QColor(Qt::blue)); // 2.1:1 exceeds the selected cutoff and stays hidden.
   // Preset menu is exclusive and pushes the alarm threshold into paint.
   auto *hazardMenu=preview->findChild<QMenu*>("hazardThresholdMenu");
   check(hazardMenu && hazardMenu->actions().size()==3);
@@ -164,7 +164,7 @@ EdgeDetection::Region low; low.startPixel=QPoint(20,60); low.endPixel=QPoint(59,
       check(preview->alarmThreshold()==float(action->data().toDouble()));
   }
   // At the 4.5:1 preset both regions are critical alarm; back at 2:1 the 2.1:1
-  // region returns to the marginal band.
+  // region is hidden again.
   check(QMetaObject::invokeMethod(preview,"presentFrame",Qt::DirectConnection,
         Q_ARG(QImage,completed),Q_ARG(QRect,previousArea), Q_ARG(std::vector<EdgeDetection::Region>,regions)));
   check(pixelAt(preview->grab().toImage(),40,140)==QColor(Qt::red));
@@ -173,7 +173,7 @@ EdgeDetection::Region low; low.startPixel=QPoint(20,60); low.endPixel=QPoint(59,
   check(preview->alarmThreshold()==2.0f);
   check(QMetaObject::invokeMethod(preview,"presentFrame",Qt::DirectConnection,
         Q_ARG(QImage,completed),Q_ARG(QRect,previousArea), Q_ARG(std::vector<EdgeDetection::Region>,regions)));
-  check(pixelAt(preview->grab().toImage(),180,140)==QColor(255,165,0));
+  check(pixelAt(preview->grab().toImage(),180,140)==QColor(Qt::blue));
   check(!controls->mask().contains(QPoint(40,140)));
   hazard->click(); check(!hazard->isChecked());
  check(pixelAt(preview->grab().toImage(),40,140)==QColor(Qt::blue));

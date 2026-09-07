@@ -156,8 +156,8 @@ private slots:
         QVERIFY(analyzer.regions()[0].indeterminate);
         // Narrow antialiased core still keeps a solid interior: a 3px gray stem
         // (60) with single-pixel 150 ramps on a 255 background confirms at the
-        // 0.5 share, so its medians reflect the core and the ramp midpoint,
-        // not pure noise.
+        // stable plateau search, so its medians reflect the core and background
+        // instead of the ramp midpoint.
         QImage core(40, 20, QImage::Format_RGB32);
         for (int y = 0; y < core.height(); ++y)
             for (int x = 0; x < core.width(); ++x) {
@@ -170,26 +170,44 @@ private slots:
         const auto &r = analyzer.regions()[0];
         QVERIFY(!r.indeterminate);
         QCOMPARE(r.color1, (std::array<quint8,3>{60,0,0}));
-        QCOMPARE(r.color2, (std::array<quint8,3>{150,0,0}));
+        QCOMPARE(r.color2, (std::array<quint8,3>{255,0,0}));
         // Storage reuse: the region vector pointer stays stable across frames.
         const auto *storage = analyzer.regions().data();
         QVERIFY(analyzer.analyze(core));
         QCOMPARE(analyzer.regions().data(), storage);
     }
 
+    void antialiasedHighContrastIsNotAHazard()
+    {
+        QImage image(32, 24, QImage::Format_RGB32);
+        for (int y = 0; y < image.height(); ++y)
+            for (int x = 0; x < image.width(); ++x) {
+                const int value = x < 10 ? 255 : x == 10 ? 192 : x == 11 ? 128 : 0;
+                image.setPixel(x, y, qRgb(value, value, value));
+            }
+        EdgeDetection::RegionAnalyzer analyzer;
+        QVERIFY(analyzer.analyze(image));
+        QCOMPARE(analyzer.regions().size(), size_t(1));
+        const auto &region = analyzer.regions().front();
+        QVERIFY(!region.indeterminate);
+        QCOMPARE(region.contrastRatio, 21.0f);
+        QCOMPARE(EdgeDetection::severityFor(region.contrastRatio, region.indeterminate, 2.0f),
+                 EdgeDetection::Severity::Hidden);
+    }
+
     void severityClassifier()
     {
         constexpr float t = EdgeDetection::DefaultAlarmThreshold;
-        QCOMPARE(EdgeDetection::severityFor(0.8f, false, t), EdgeDetection::Severity::Critical);
+        QCOMPARE(EdgeDetection::severityFor(0.8f, false, t), EdgeDetection::Severity::Hidden);
         QCOMPARE(EdgeDetection::severityFor(1.0f, false, t), EdgeDetection::Severity::Warn);
         QCOMPARE(EdgeDetection::severityFor(1.9f, false, t), EdgeDetection::Severity::Warn);
-        QCOMPARE(EdgeDetection::severityFor(2.0f, false, t), EdgeDetection::Severity::Marginal);
-        QCOMPARE(EdgeDetection::severityFor(2.9f, false, t), EdgeDetection::Severity::Marginal);
+        QCOMPARE(EdgeDetection::severityFor(2.0f, false, t), EdgeDetection::Severity::Hidden);
+        QCOMPARE(EdgeDetection::severityFor(2.9f, false, t), EdgeDetection::Severity::Hidden);
         QCOMPARE(EdgeDetection::severityFor(3.0f, false, t), EdgeDetection::Severity::Hidden);
         QCOMPARE(EdgeDetection::severityFor(4.4f, false, 4.5f), EdgeDetection::Severity::Warn);
         QCOMPARE(EdgeDetection::severityFor(4.5f, false, 4.5f), EdgeDetection::Severity::Hidden);
-        QCOMPARE(EdgeDetection::severityFor(0.5f, true, t), EdgeDetection::Severity::Indeterminate);
-        QCOMPARE(EdgeDetection::severityFor(9.0f, true, 4.5f), EdgeDetection::Severity::Indeterminate);
+        QCOMPARE(EdgeDetection::severityFor(0.5f, true, t), EdgeDetection::Severity::Hidden);
+        QCOMPARE(EdgeDetection::severityFor(9.0f, true, 4.5f), EdgeDetection::Severity::Hidden);
     }
 
     void regionBenchmark()

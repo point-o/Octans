@@ -22,7 +22,7 @@ Each `Region` carries:
 - `startPixel` / `endPixel`: inclusive bounding box in input-image coordinates.
 - `color1` / `color2`: raw channel-wise median RGB bytes of the two edge sides.
 - `contrastRatio`: WCAG-style `(L1 + 0.05) / (L2 + 0.05)` on the two medians.
-- `indeterminate`: true when neither side has a solid color anchor (see below).
+- `indeterminate`: true when solid color anchors are insufficient (see below).
 
 ## Metric
 
@@ -31,16 +31,18 @@ Each `Region` carries:
    (horizontal or vertical) records which neighbor pair the edge runs between.
 2. Flood-fill 8-connected edge pixels into regions, dropping regions smaller than
    `MinimumEdgePixels` (4).
-3. For each edge pair, take the lexicographically smaller RGB triple as side A
+3. Search outward from each edge side up to four pixels for a stable adjacent
+   pair (at most four byte steps per channel). This samples nearby solid colors
+   instead of short antialiased ramps. For each pair, take the smaller RGB triple as side A
    and the larger as side B, then take the channel-wise median of each side in
    raw byte space (no averaging, no linearization before the median).
 4. Contrast uses an sRGB linear-luminance LUT that follows the WCAG math's 0.03928
    breakpoint, so reported ratios match standard contrast calculations.
 5. Reliability: each side's pixels are binned by quantized linear luminance
-   (64 bins). If neither side's most common bin reaches `MinimumDominantShare`
-   (0.45) of that side, the boundary is blend-only — thin antialiased text or a
-   gradient — and neither median describes a real surface, so the region is
-   marked `indeterminate`.
+   (64 bins). If either side's most common bin falls below `MinimumDominantShare`
+   (0.45), or fewer than 75% of pairs have stable anchors on both sides, mark the
+   region `indeterminate`. Such regions remain available in the API but are hidden
+   in Hazard Mode.
 
 ## Thresholds and presentation
 
@@ -52,15 +54,15 @@ worker concern; the worker always computes raw ratios. Presets:
 - **4.5:1**: WCAG normal-text program.
 
 `EdgeDetection::severityFor()` maps a ratio plus the chosen threshold to a
-severity: critical below half the threshold, warn below the threshold, marginal
-below 3:1, hidden otherwise; `indeterminate` overrides to its own severity.
+severity: critical below half the threshold, warn below the threshold, hidden
+otherwise. Invalid and indeterminate measurements are always hidden.
 Outlines draw a black underlay plus a colored core so geometry reads for every
-color-vision type; indeterminate boundaries use white/black dashes.
+color-vision type. No extra band is displayed above the selected cutoff.
 
 These are local image measurements, **not WCAG compliance results**. A screenshot
 does not establish text semantics, font sizing, or intended foreground and
 background colors. Thin antialiased text is the specific case the ratio cannot
-vouch for; that is what the dashed style exists to say.
+vouch for; uncertain samples are suppressed instead of presented as hazards.
 
 ## Integration and cadence
 
