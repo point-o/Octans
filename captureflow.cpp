@@ -48,8 +48,8 @@ protected:
         }
     }
 };
-constexpr int minimumRegionWidth = 80;
-constexpr int minimumRegionHeight = 60;
+constexpr int minimumRegionWidth = 88;
+constexpr int minimumRegionHeight = 72;
 QPoint globalMouse(QMouseEvent *event) {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     return event->globalPosition().toPoint();
@@ -389,6 +389,17 @@ handle->installEventFilter(this);
     closeButton->setToolTip(tr("Close capture"));
     connect(closeButton, &QPushButton::clicked, this, &QWidget::close);
     setTabOrder(handle, closeButton);
+    resizeHandle = new QPushButton(QStringLiteral("↘"), controls);
+    resizeHandle->setObjectName(QStringLiteral("captureResizeHandle"));
+    resizeHandle->setAccessibleName(tr("Resize capture"));
+    resizeHandle->setToolTip(tr("Drag to resize; arrow keys resize when focused"));
+    resizeHandle->setAccessibleDescription(resizeHandle->toolTip());
+    resizeHandle->setFocusPolicy(Qt::StrongFocus);
+    resizeHandle->setCursor(Qt::SizeFDiagCursor);
+    resizeHandle->setStyleSheet(QStringLiteral("QPushButton { color: white; background: #252525; border: 1px solid white; border-radius: 6px; font-size: 20px; } QPushButton:focus { border: 2px solid #ffdf00; }"));
+    resizeHandle->installEventFilter(this);
+    setTabOrder(closeButton, resizeHandle);
+    setMinimumSize(minimumRegionWidth, minimumRegionHeight);
     setGeometry(region);
     positionControls();
 }
@@ -442,9 +453,11 @@ void CapturePreview::resizeEvent(QResizeEvent *event)
 }
 void CapturePreview::positionControls()
 {
-    controls->setGeometry(x(), y(), width(), 44);
+    controls->setGeometry(geometry());
     closeButton->setGeometry(width()-44, 0, 44, 44);
-    controls->setMask(QRegion(handle->geometry()).united(QRegion(closeButton->geometry())));
+    resizeHandle->setGeometry(width()-28, height()-28, 28, 28);
+    controls->setMask(QRegion(handle->geometry()).united(QRegion(closeButton->geometry()))
+                      .united(QRegion(resizeHandle->geometry())));
     if (capture) {
         // Retain the last image until the worker returns pixels for the new region.
         capture->setRegion(physicalRegion());
@@ -474,10 +487,7 @@ void CapturePreview::showEvent(QShowEvent *event)
             return;
         }
         capture = new DesktopCapture(this);
-        connect(capture, &DesktopCapture::frameReady, this, [this](const QImage &image, const QRect &area) {
-            if (area == physicalRegion()) { frame = image; update(); }
-            capture->acknowledgeFrame();
-        });
+        connect(capture, &DesktopCapture::frameReady, this, &CapturePreview::presentFrame);
         connect(capture, &DesktopCapture::captureFailed, this, [this](const QString &error) {
             captureError = error; frame = QImage();
             setAccessibleDescription(error); update();
@@ -488,6 +498,14 @@ void CapturePreview::showEvent(QShowEvent *event)
 #endif
     }
 }
+void CapturePreview::presentFrame(const QImage &image, const QRect &area)
+{
+    // One frame is in flight at a time. Exact geometry matching starves painting
+    // during movement. Show completed frames; the next capture uses the latest
+    // region and converges when movement stops, without a queued frame backlog.
+    if (!image.isNull() && !area.isEmpty()) { frame = image; update(); }
+    if (capture) capture->acknowledgeFrame();
+}
 void CapturePreview::hideEvent(QHideEvent *event)
 {
     controls->hide();
@@ -496,6 +514,37 @@ void CapturePreview::hideEvent(QHideEvent *event)
 }
 bool CapturePreview::eventFilter(QObject *object, QEvent *event)
 {
+    if (object == resizeHandle) {
+        if (event->type() == QEvent::MouseButtonPress) {
+            auto *mouse = static_cast<QMouseEvent *>(event);
+            if (mouse->button() == Qt::LeftButton) {
+                resizing = true;
+                resizePress = globalMouse(mouse);
+                resizeStart = size();
+                resizeHandle->setFocus(Qt::MouseFocusReason);
+                return true;
+            }
+        } else if (event->type() == QEvent::MouseMove && resizing) {
+            const QPoint delta = globalMouse(static_cast<QMouseEvent *>(event)) - resizePress;
+            resize((resizeStart + QSize(delta.x(), delta.y())).expandedTo(minimumSize()));
+            return true;
+        } else if (event->type() == QEvent::MouseButtonRelease) {
+            resizing = false;
+            return true;
+        } else if (event->type() == QEvent::KeyPress) {
+            const auto *key = static_cast<QKeyEvent *>(event);
+            QSize delta;
+            switch (key->key()) {
+            case Qt::Key_Left: delta = QSize(-10, 0); break;
+            case Qt::Key_Right: delta = QSize(10, 0); break;
+            case Qt::Key_Up: delta = QSize(0, -10); break;
+            case Qt::Key_Down: delta = QSize(0, 10); break;
+            default: return QWidget::eventFilter(object, event);
+            }
+            resize((size() + delta).expandedTo(minimumSize()));
+            return true;
+        }
+    }
     if (object == handle) {
         if (event->type() == QEvent::MouseButtonPress) {
             auto *mouse = static_cast<QMouseEvent *>(event);

@@ -1,5 +1,8 @@
 #include "desktopcapture.h"
 #include <QMutexLocker>
+#include <QElapsedTimer>
+#include <array>
+#include <cstring>
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
 #endif
@@ -7,12 +10,20 @@
 DesktopCapture::~DesktopCapture()
 {
     requestInterruption();
+    changed.wakeAll();
     wait();
+}
+void DesktopCapture::acknowledgeFrame()
+{
+    QMutexLocker lock(&mutex);
+    pending.store(false);
+    changed.wakeAll();
 }
 void DesktopCapture::setRegion(const QRect &physicalRegion)
 {
     QMutexLocker lock(&mutex);
     region = physicalRegion;
+    changed.wakeAll();
 }
 void DesktopCapture::run()
 {
@@ -25,11 +36,43 @@ void DesktopCapture::run()
     void *bits = nullptr;
     QSize allocated;
     QString failure;
+    // Owned slots survive signal delivery. Never write a slot while a queued
+    // signal, pixmap, or consumer still shares its storage; skip instead of
+    // allocating unbounded replacement images for a slow consumer.
+    std::array<QImage, 3> frames;
+    QElapsedTimer cadence;
+    cadence.start();
+    constexpr qint64 framePeriodNs = 1000000000 / 60;
+    qint64 nextFrameNs = 0;
     if (!memory) failure = tr("Desktop capture could not open the display.");
     while (failure.isEmpty() && !isInterruptionRequested()) {
         QRect area;
-        { QMutexLocker lock(&mutex); area = region; }
-        if (area.isEmpty() || pending.load()) { msleep(20); continue; }
+        {
+            QMutexLocker lock(&mutex);
+            area = region;
+            const qint64 remainingNs = nextFrameNs - cadence.nsecsElapsed();
+            if (area.isEmpty() || pending.load() || remainingNs > 0) {
+                // Bounded wait also observes requestInterruption() from callers.
+                const unsigned long delayMs = remainingNs > 0
+                    ? static_cast<unsigned long>((remainingNs + 999999) / 1000000)
+                    : 20;
+                changed.wait(&mutex, delayMs);
+                continue;
+            }
+        }
+        nextFrameNs = cadence.nsecsElapsed() + framePeriodNs;
+        QImage *available = nullptr;
+        for (QImage &candidate : frames) {
+            if (candidate.isNull() || candidate.isDetached()) {
+                available = &candidate;
+                break;
+            }
+        }
+        if (!available) continue;
+        QImage &frame = *available;
+        if (frame.size() != area.size())
+            frame = QImage(area.size(), QImage::Format_RGB32);
+        if (frame.isNull()) { failure = tr("Desktop capture ran out of image memory."); break; }
         if (allocated != area.size()) {
             if (bitmap) { SelectObject(memory, original); DeleteObject(bitmap); bitmap = nullptr; }
             BITMAPINFO info{};
@@ -50,16 +93,14 @@ void DesktopCapture::run()
             failure = tr("Desktop capture could not read this region."); break;
         }
         GdiFlush();
-        // Copy only the selected region. One queued image maximum; the DIB is reused.
-        QImage frame = QImage(static_cast<const uchar *>(bits), area.width(), area.height(),
-                                    area.width() * 4, QImage::Format_RGB32).copy();
-        if (frame.isNull()) { failure = tr("Desktop capture ran out of image memory."); break; }
+        // A single copy separates the reusable DIB from asynchronous readers.
+        // Both RGB32 layouts are tightly packed; storage is reused at steady size.
+        std::memcpy(frame.bits(), bits, size_t(frame.sizeInBytes()));
         if (!PixelTransform::applyInPlace(frame, mode.load())) {
             failure = tr("The selected pixel transform could not process this image."); break;
         }
         pending.store(true);
         emit frameReady(frame, area);
-        msleep(100); // Modest 10 FPS prototype, independent of UI event handling.
     }
     if (bitmap) {
         if (original && original != HGDI_ERROR) SelectObject(memory, original);

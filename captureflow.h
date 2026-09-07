@@ -103,6 +103,7 @@ protected:
     void hideEvent(QHideEvent *) override;
     bool eventFilter(QObject *, QEvent *) override;
 private:
+    Q_SLOT void presentFrame(const QImage &image, const QRect &area);
     void positionControls();
     QRect physicalRegion() const;
     DesktopCapture *capture = nullptr;
@@ -113,6 +114,10 @@ PixelTransform::Mode simulationMode = PixelTransform::Mode::Original;
     CaptureHandle *handle;
     ModePopup *modePopup = nullptr;
     QPushButton *closeButton;
+    QPushButton *resizeHandle = nullptr;
+    QSize resizeStart;
+    QPoint resizePress;
+    bool resizing = false;
     QPoint dragOffset;
     QPoint pressPosition;
     bool dragged = false;

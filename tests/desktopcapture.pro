@@ -1,0 +1,9 @@
+QT += core gui testlib
+CONFIG += console testcase c++17
+CONFIG -= app_bundle
+TEMPLATE = app
+TARGET = desktopcapture_test
+INCLUDEPATH += ..
+SOURCES += desktopcapture_test.cpp ../desktopcapture.cpp ../pixeltransform.cpp
+HEADERS += ../desktopcapture.h ../pixeltransform.h
+win32: LIBS += -lgdi32 -luser32

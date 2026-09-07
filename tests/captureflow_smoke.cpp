@@ -59,10 +59,10 @@ int main(int argc,char **argv) {
      auto *worker=preview->findChild<DesktopCapture *>(); check(worker!=nullptr);
      QSignalSpy frames(worker,&DesktopCapture::frameReady);
      QTest::qWait(400); check(!frames.isEmpty());
-     check(qvariant_cast<QImage>(frames.last().at(0)).pixelColor(70,70)==QColor(40,100,160));
+     check(qvariant_cast<QImage>(frames.last().at(0)).pixelColor(70,70)==QColor(40,100,160)); frames.clear();
      backing.setColor(QPalette::Window,QColor(160,60,40)); underlying.setPalette(backing);
      QTest::qWait(400);
-     check(qvariant_cast<QImage>(frames.last().at(0)).pixelColor(70,70)==QColor(160,60,40));
+     check(qvariant_cast<QImage>(frames.last().at(0)).pixelColor(70,70)==QColor(160,60,40)); frames.clear();
      auto *modeHandle=preview->findChild<CaptureHandle *>("captureHandle"); check(modeHandle);
      auto *popup=preview->findChild<ModePopup *>("simulationMenu"); check(popup);
      // Arrow keys navigate the popup; Return activates the focused circle (tritanopia).
@@ -73,7 +73,7 @@ int main(int argc,char **argv) {
      QTest::keyClick(popup->focusWidget(),Qt::Key_Return); QTest::qWait(350);
      QImage tritanExpected(1,1,QImage::Format_RGB32); tritanExpected.fill(QColor(160,60,40));
      check(PixelTransform::applyInPlace(tritanExpected,PixelTransform::Mode::Tritanopia));
-     check(qvariant_cast<QImage>(frames.last().at(0)).pixelColor(70,70)==tritanExpected.pixelColor(0,0));
+     check(qvariant_cast<QImage>(frames.last().at(0)).pixelColor(70,70)==tritanExpected.pixelColor(0,0)); frames.clear();
      check(modeHandle->mode()==PixelTransform::Mode::Tritanopia);
      const char *modeButtons[]={"modeProtanopia","modeDeuteranopia","modeTritanopia"};
      for (int mode=1;mode<=3;++mode) {
@@ -84,14 +84,14 @@ int main(int argc,char **argv) {
          check(button->mode()==static_cast<PixelTransform::Mode>(mode));
          button->click(); QTest::qWait(350);
          check(!popup->isVisible());
-         check(qvariant_cast<QImage>(frames.last().at(0)).pixelColor(70,70)==expected.pixelColor(0,0));
+         check(qvariant_cast<QImage>(frames.last().at(0)).pixelColor(70,70)==expected.pixelColor(0,0)); frames.clear();
          check(modeHandle->mode()==static_cast<PixelTransform::Mode>(mode));
      }
 // Clicking the active circle toggles back to Original.
       auto *active=preview->findChild<ModeCircleButton *>("modeTritanopia"); check(active);
       modeHandle->click(); app.processEvents();
       active->click(); QTest::qWait(250);
-      check(qvariant_cast<QImage>(frames.last().at(0)).pixelColor(70,70)==QColor(160,60,40));
+      check(qvariant_cast<QImage>(frames.last().at(0)).pixelColor(70,70)==QColor(160,60,40)); frames.clear();
       check(modeHandle->mode()==PixelTransform::Mode::Original);
   }
 #endif
@@ -102,6 +102,33 @@ int main(int argc,char **argv) {
  auto *controls=preview->findChild<QWidget *>("captureControls");
  check(controls->pos()==preview->pos()); check(!controls->mask().contains(QPoint(100,20)));
  check(handle->geometry()==QRect(0,0,44,44));
+ auto *resizeHandle=preview->findChild<QPushButton *>("captureResizeHandle"); check(resizeHandle);
+ const QSize initialSize=preview->size();
+ QTest::keyClick(resizeHandle,Qt::Key_Right); QTest::keyClick(resizeHandle,Qt::Key_Down);
+ check(preview->size()==initialSize+QSize(10,10));
+ check(controls->geometry()==preview->geometry());
+ check(controls->mask().contains(QPoint(preview->width()-14,preview->height()-14)));
+ check(!controls->mask().contains(preview->rect().center()));
+ const QSize beforeDrag=preview->size();
+ QTest::mousePress(resizeHandle,Qt::LeftButton,Qt::NoModifier,QPoint(14,14));
+ QTest::mouseMove(resizeHandle,QPoint(34,29));
+ check(preview->size()==beforeDrag+QSize(20,15));
+ QTest::mouseRelease(resizeHandle,Qt::LeftButton,Qt::NoModifier,QPoint(14,14));
+ preview->resize(1,1); check(preview->size()==QSize(88,72));
+ QTest::keyClick(resizeHandle,Qt::Key_Left); QTest::keyClick(resizeHandle,Qt::Key_Up);
+ check(preview->size()==QSize(88,72));
+ preview->resize(initialSize);
+ // A completed asynchronous frame must still paint if movement has already
+ // requested a newer region; otherwise continuous dragging freezes the image.
+ QImage completed(initialSize,QImage::Format_RGB32); completed.fill(Qt::red);
+ const QRect previousArea=preview->geometry(); preview->move(preview->pos()+QPoint(10,0));
+ check(QMetaObject::invokeMethod(preview,"presentFrame",Qt::DirectConnection,
+       Q_ARG(QImage,completed),Q_ARG(QRect,previousArea)));
+ check(preview->grab().toImage().pixelColor(50,50)==QColor(Qt::red));
+ completed.fill(Qt::blue); preview->move(preview->pos()+QPoint(10,0));
+ check(QMetaObject::invokeMethod(preview,"presentFrame",Qt::DirectConnection,
+       Q_ARG(QImage,completed),Q_ARG(QRect,previousArea)));
+ check(preview->grab().toImage().pixelColor(50,50)==QColor(Qt::blue));
  preview->close(); app.sendPostedEvents(nullptr,QEvent::DeferredDelete); app.processEvents(); check(main.isVisible());
  main.findChild<QPushButton *>("newCaptureButton")->click(); app.processEvents(); selector=main.findChild<CaptureSelector *>();
  QTest::mouseClick(selector,Qt::LeftButton,Qt::NoModifier,QPoint(30,30)); check(selector->isVisible());
