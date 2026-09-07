@@ -2,6 +2,8 @@
 #define EDGEDETECTION_H
 
 #include <QImage>
+#include <QPoint>
+#include <array>
 #include <vector>
 
 namespace EdgeDetection {
@@ -25,6 +27,41 @@ private:
     QSize m_size;
     std::vector<Sample> m_samples;
     std::vector<float> m_rows;
+};
+
+struct Region {
+    QPoint startPixel; // Inclusive bounding box in input-image coordinates.
+    QPoint endPixel;
+    std::array<quint8, 3> color1{}; // Raw channel-wise median RGB bytes.
+    std::array<quint8, 3> color2{};
+    float contrastRatio = 1.0f;
+};
+
+// Hazard Mode outlines regions whose contrast ratio falls below this value.
+// Regions at or above the threshold are considered safely distinguishable.
+inline constexpr float ContrastAlarmThreshold = 2.0f;
+
+// Analyze the already simulated, caller-sized RGB32 image. No rescaling or input
+// mutation. Connected RGB edges retain low-contrast and equal-luminance colors.
+// Own one instance per worker. Results remain valid until the next analyze().
+class RegionAnalyzer {
+public:
+    static constexpr size_t MaximumPixels = 1024 * 1024;
+    static constexpr int MaximumDimension = 4096;
+    static constexpr size_t MaximumRegions = 1024;
+    static constexpr int MinimumChannelDifference = 12;
+    static constexpr size_t MinimumEdgePixels = 4;
+
+    // Unsupported formats / oversized input return false, preserving results.
+    // Null input succeeds and clears results. RGB32 is deliberately required:
+    // raw median bytes cannot also describe compositing translucent ARGB input.
+    bool analyze(const QImage &image);
+    const std::vector<Region> &regions() const { return m_regions; }
+
+private:
+    std::vector<quint8> m_edges;
+    std::vector<quint32> m_queue;
+    std::vector<Region> m_regions;
 };
 
 } // namespace EdgeDetection

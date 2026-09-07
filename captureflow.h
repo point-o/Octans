@@ -6,6 +6,7 @@
 #include <QImage>
 #include <QElapsedTimer>
 #include "pixeltransform.h"
+#include "edgedetection.h"
 class QKeyEvent;
 class QShowEvent;
 class QHideEvent;
@@ -103,17 +104,21 @@ protected:
     void hideEvent(QHideEvent *) override;
     bool eventFilter(QObject *, QEvent *) override;
 private:
-    Q_SLOT void presentFrame(const QImage &image, const QRect &area);
+    Q_SLOT void presentFrame(const QImage &image, const QRect &area,
+                             const std::vector<EdgeDetection::Region> &regions);
     void positionControls();
     QRect physicalRegion() const;
     DesktopCapture *capture = nullptr;
     QImage frame;
+    std::vector<EdgeDetection::Region> hazardRegions;
+    bool hazardEnabled = false;
     QString captureError;
 PixelTransform::Mode simulationMode = PixelTransform::Mode::Original;
     QWidget *controls;
     CaptureHandle *handle;
     ModePopup *modePopup = nullptr;
     QPushButton *closeButton;
+    QPushButton *hazardButton = nullptr;
     QPushButton *resizeHandle = nullptr;
     QSize resizeStart;
     QPoint resizePress;

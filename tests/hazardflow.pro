@@ -1,9 +1,8 @@
-QT += core gui testlib
+QT += widgets testlib
 CONFIG += console testcase c++17
 CONFIG -= app_bundle
-TEMPLATE = app
-TARGET = desktopcapture_test
+TARGET = hazardflow-test
 INCLUDEPATH += ..
-SOURCES += desktopcapture_test.cpp ../desktopcapture.cpp ../pixeltransform.cpp ../edgedetection.cpp
+SOURCES += hazardflow_test.cpp ../desktopcapture.cpp ../pixeltransform.cpp ../edgedetection.cpp
 HEADERS += ../desktopcapture.h ../pixeltransform.h ../edgedetection.h
 win32: LIBS += -lgdi32 -luser32

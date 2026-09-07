@@ -24,13 +24,13 @@ int main(int argc,char **argv) {
  QTest::keyClick(selector,Qt::Key_Escape); app.sendPostedEvents(nullptr,QEvent::DeferredDelete); app.processEvents(); check(main.isVisible());
  main.findChild<QPushButton *>("newCaptureButton")->click(); app.processEvents();
  selector=main.findChild<CaptureSelector *>(); QSignalSpy selected(selector,&CaptureSelector::regionSelected);
- QTest::mousePress(selector,Qt::LeftButton,Qt::NoModifier,QPoint(300,260));
+ QTest::mousePress(selector,Qt::LeftButton,Qt::NoModifier,QPoint(400,260));
  QTest::mouseMove(selector,QPoint(100,100)); selector->grab().save("selection-test.png");
  QTest::mouseRelease(selector,Qt::LeftButton,Qt::NoModifier,QPoint(100,100)); app.processEvents();
  check(selected.size()==1);
  auto *preview=main.findChild<CapturePreview *>(); check(preview && preview->isVisible());
  const QRect region=selected.at(0).at(0).toRect();
- check(region.size()==QSize(201,161)); check(preview->geometry()==region);
+ check(region.size()==QSize(301,161)); check(preview->geometry()==region);
  check(preview->windowFlags().testFlag(Qt::WindowTransparentForInput));
  check(preview->windowFlags().testFlag(Qt::WindowDoesNotAcceptFocus));
  check(preview->grab().toImage().pixelColor(100,100).alpha()==0);
@@ -100,7 +100,7 @@ int main(int argc,char **argv) {
  QTest::keyClick(handle,Qt::Key_Right); check(preview->pos()==old+QPoint(10,0));
  check(preview->grab().toImage().pixelColor(100,100)==beforeMove.pixelColor(100,100));
  auto *controls=preview->findChild<QWidget *>("captureControls");
- check(controls->pos()==preview->pos()); check(!controls->mask().contains(QPoint(100,20)));
+ check(controls->pos()==preview->pos()); check(!controls->mask().contains(QPoint(200,20)));
  check(handle->geometry()==QRect(0,0,44,44));
  auto *resizeHandle=preview->findChild<QPushButton *>("captureResizeHandle"); check(resizeHandle);
  const QSize initialSize=preview->size();
@@ -114,21 +114,50 @@ int main(int argc,char **argv) {
  QTest::mouseMove(resizeHandle,QPoint(34,29));
  check(preview->size()==beforeDrag+QSize(20,15));
  QTest::mouseRelease(resizeHandle,Qt::LeftButton,Qt::NoModifier,QPoint(14,14));
- preview->resize(1,1); check(preview->size()==QSize(88,72));
+ preview->resize(1,1); check(preview->size()==QSize(240,72));
  QTest::keyClick(resizeHandle,Qt::Key_Left); QTest::keyClick(resizeHandle,Qt::Key_Up);
- check(preview->size()==QSize(88,72));
+ check(preview->size()==QSize(240,72));
  preview->resize(initialSize);
  // A completed asynchronous frame must still paint if movement has already
  // requested a newer region; otherwise continuous dragging freezes the image.
+ std::vector<EdgeDetection::Region> regions;
  QImage completed(initialSize,QImage::Format_RGB32); completed.fill(Qt::red);
  const QRect previousArea=preview->geometry(); preview->move(preview->pos()+QPoint(10,0));
  check(QMetaObject::invokeMethod(preview,"presentFrame",Qt::DirectConnection,
-       Q_ARG(QImage,completed),Q_ARG(QRect,previousArea)));
+       Q_ARG(QImage,completed),Q_ARG(QRect,previousArea), Q_ARG(std::vector<EdgeDetection::Region>,regions)));
  check(preview->grab().toImage().pixelColor(50,50)==QColor(Qt::red));
  completed.fill(Qt::blue); preview->move(preview->pos()+QPoint(10,0));
  check(QMetaObject::invokeMethod(preview,"presentFrame",Qt::DirectConnection,
-       Q_ARG(QImage,completed),Q_ARG(QRect,previousArea)));
+       Q_ARG(QImage,completed),Q_ARG(QRect,previousArea), Q_ARG(std::vector<EdgeDetection::Region>,regions)));
  check(preview->grab().toImage().pixelColor(50,50)==QColor(Qt::blue));
+ auto *hazard=preview->findChild<QPushButton *>("hazardModeButton");
+ check(hazard && hazard->isCheckable() && !hazard->isChecked());
+ check(hazard->x()>handle->geometry().right());
+ check(controls->mask().contains(hazard->geometry().center()));
+ hazard->click(); check(hazard->isChecked());
+EdgeDetection::Region low; low.startPixel=QPoint(20,60); low.endPixel=QPoint(59,89);
+    low.contrastRatio=EdgeDetection::ContrastAlarmThreshold*0.95f;
+  EdgeDetection::Region high; high.startPixel=QPoint(90,60); high.endPixel=QPoint(129,89);
+    high.contrastRatio=EdgeDetection::ContrastAlarmThreshold*1.05f;
+ regions={low,high};
+ // Completed frame and its regions share coordinates, even after a resize.
+ preview->resize(initialSize*2);
+ check(QMetaObject::invokeMethod(preview,"presentFrame",Qt::DirectConnection,
+       Q_ARG(QImage,completed),Q_ARG(QRect,previousArea), Q_ARG(std::vector<EdgeDetection::Region>,regions)));
+ const QImage marked=preview->grab().toImage();
+ const auto pixelAt=[&](const QImage &image,int x,int y) {
+     return image.pixelColor(qRound(x*image.devicePixelRatio()),qRound(y*image.devicePixelRatio()));
+ };
+ check(pixelAt(marked,40,140)==QColor(Qt::red));
+ check(pixelAt(marked,70,140)==QColor(Qt::blue)); // No fill.
+ check(pixelAt(marked,180,140)==QColor(Qt::blue)); // Threshold excludes 2:1.
+ check(!controls->mask().contains(QPoint(40,140)));
+ hazard->click(); check(!hazard->isChecked());
+ check(pixelAt(preview->grab().toImage(),40,140)==QColor(Qt::blue));
+ // Late results cannot restore outlines after toggling off.
+ check(QMetaObject::invokeMethod(preview,"presentFrame",Qt::DirectConnection,
+       Q_ARG(QImage,completed),Q_ARG(QRect,previousArea), Q_ARG(std::vector<EdgeDetection::Region>,regions)));
+ check(pixelAt(preview->grab().toImage(),40,140)==QColor(Qt::blue));
  preview->close(); app.sendPostedEvents(nullptr,QEvent::DeferredDelete); app.processEvents(); check(main.isVisible());
  main.findChild<QPushButton *>("newCaptureButton")->click(); app.processEvents(); selector=main.findChild<CaptureSelector *>();
  QTest::mouseClick(selector,Qt::LeftButton,Qt::NoModifier,QPoint(30,30)); check(selector->isVisible());
@@ -136,3 +165,4 @@ int main(int argc,char **argv) {
  preview=main.findChild<CapturePreview *>(); check(preview && preview->isVisible()); preview->close();
  app.sendPostedEvents(nullptr,QEvent::DeferredDelete); app.processEvents(); check(main.isVisible());
 }
+

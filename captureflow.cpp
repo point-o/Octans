@@ -48,7 +48,7 @@ protected:
         }
     }
 };
-constexpr int minimumRegionWidth = 88;
+constexpr int minimumRegionWidth = 240;
 constexpr int minimumRegionHeight = 72;
 QPoint globalMouse(QMouseEvent *event) {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -388,7 +388,22 @@ handle->installEventFilter(this);
     closeButton->setAccessibleName(tr("Close capture"));
     closeButton->setToolTip(tr("Close capture"));
     connect(closeButton, &QPushButton::clicked, this, &QWidget::close);
-    setTabOrder(handle, closeButton);
+    hazardButton = new QPushButton(tr("Hazard Mode"), controls);
+    hazardButton->setObjectName(QStringLiteral("hazardModeButton"));
+    hazardButton->setCheckable(true);
+    hazardButton->setFocusPolicy(Qt::StrongFocus);
+    hazardButton->setAccessibleName(tr("Hazard Mode"));
+    hazardButton->setToolTip(tr("Outline detected edges with contrast below 2:1"));
+    hazardButton->setGeometry(48, 7, 136, 30);
+    hazardButton->setStyleSheet(QStringLiteral("QPushButton { color: white; background: #252525; border: 1px solid white; border-radius: 6px; } QPushButton:checked { background: #9f2020; } QPushButton:focus { border: 2px solid #ffdf00; }"));
+    connect(hazardButton, &QPushButton::toggled, this, [this](bool enabled) {
+        hazardEnabled = enabled;
+        hazardRegions.clear();
+        if (capture) capture->setHazardEnabled(enabled);
+        update();
+    });
+    setTabOrder(handle, hazardButton);
+    setTabOrder(hazardButton, closeButton);
     resizeHandle = new QPushButton(QStringLiteral("↘"), controls);
     resizeHandle->setObjectName(QStringLiteral("captureResizeHandle"));
     resizeHandle->setAccessibleName(tr("Resize capture"));
@@ -435,6 +450,23 @@ void CapturePreview::paintEvent(QPaintEvent *)
     p.save();
     p.setClipPath(outline);
     if (!frame.isNull()) p.drawImage(rect(), frame);
+    if (hazardEnabled && !frame.isNull()) {
+        QPen hazardPen(Qt::red, 2);
+        hazardPen.setCosmetic(true);
+        p.setPen(hazardPen);
+        p.setBrush(Qt::NoBrush);
+        const qreal scaleX = qreal(width()) / frame.width();
+        const qreal scaleY = qreal(height()) / frame.height();
+        for (const auto &region : hazardRegions) {
+            if (!(region.contrastRatio < EdgeDetection::ContrastAlarmThreshold)) continue;
+            // Region endpoints are inclusive frame pixels; scale with the same
+            // frame being displayed, even while a newer geometry is requested.
+            const QRect pixels(region.startPixel, region.endPixel);
+            if (!pixels.isValid()) continue;
+            p.drawRect(QRectF(pixels.x() * scaleX, pixels.y() * scaleY,
+                              pixels.width() * scaleX, pixels.height() * scaleY));
+        }
+    }
     if (!captureError.isEmpty()) {
         p.setPen(Qt::white);
         p.drawText(rect().adjusted(12, 48, -12, -12), Qt::TextWordWrap, captureError);
@@ -457,6 +489,7 @@ void CapturePreview::positionControls()
     closeButton->setGeometry(width()-44, 0, 44, 44);
     resizeHandle->setGeometry(width()-28, height()-28, 28, 28);
     controls->setMask(QRegion(handle->geometry()).united(QRegion(closeButton->geometry()))
+                      .united(QRegion(hazardButton->geometry()))
                       .united(QRegion(resizeHandle->geometry())));
     if (capture) {
         // Retain the last image until the worker returns pixels for the new region.
@@ -494,16 +527,22 @@ void CapturePreview::showEvent(QShowEvent *event)
         });
         capture->setRegion(physicalRegion());
         capture->setSimulationMode(simulationMode);
+        capture->setHazardEnabled(hazardEnabled);
         capture->start();
 #endif
     }
 }
-void CapturePreview::presentFrame(const QImage &image, const QRect &area)
+void CapturePreview::presentFrame(const QImage &image, const QRect &area,
+                                 const std::vector<EdgeDetection::Region> &regions)
 {
     // One frame is in flight at a time. Exact geometry matching starves painting
     // during movement. Show completed frames; the next capture uses the latest
     // region and converges when movement stops, without a queued frame backlog.
-    if (!image.isNull() && !area.isEmpty()) { frame = image; update(); }
+    if (!image.isNull() && !area.isEmpty()) {
+        frame = image;
+        hazardRegions = hazardEnabled ? regions : std::vector<EdgeDetection::Region>{};
+        update();
+    }
     if (capture) capture->acknowledgeFrame();
 }
 void CapturePreview::hideEvent(QHideEvent *event)

@@ -17,7 +17,7 @@ Use the same pattern with the following projects and executables:
 | --- | --- | --- |
 | `pixeltransform.pro` | `pixeltransform-test` | Known colors, neutral values, alpha, formats, shared-image isolation, in-place reuse, metadata, stride |
 | `edgedetection.pro` | `edgedetection-test` | Uniform fields, known edges, orientations, luminance, alpha, formats, stride, buffer reuse, CPU benchmarks |
-| `desktopcapture.pro` | `desktopcapture-test` | Windows GDI worker, acknowledgement backpressure, retained-frame safety, pool exhaustion/recovery, storage reuse, resizing |
+| `desktopcapture.pro` | `desktopcapture_test` | Windows GDI worker, acknowledgement backpressure, retained-frame safety, pool exhaustion/recovery, storage reuse, resizing |
 | `captureflow.pro` | `captureflow-smoke` | Selection, launcher restoration, picker, movement, resizing, input transparency, preview close |
 | `capture_pipeline_benchmark.pro` | `capture_pipeline_benchmark` | Preallocated copy-plus-transform timings, with a storage-reuse check |
 
@@ -51,7 +51,7 @@ $env:QT_QPA_PLATFORM = 'windows'
 This briefly opens native windows and additionally verifies native input
 transparency, hit-testing, capture exclusion, live updates from a colored test
 window, and the actual simulation modes. Run it in an interactive desktop session.
-The separate `desktopcapture-test` needs an accessible Windows desktop even though
+The separate `desktopcapture_test` needs an accessible Windows desktop even though
 it does not open its own windows. A `BitBlt` failure indicates capture could not
 read the desktop and must not be reported as a passing worker check.
 

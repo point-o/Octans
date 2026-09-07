@@ -19,7 +19,10 @@ Space Grotesk font. Windows high-contrast colors are respected by the launcher.
    has focus.
 4. Drag the bottom-right resize grip to resize the live view. When that grip has
    focus, arrow keys adjust width or height in 10-pixel steps.
-5. Close the capture with its **×** control to return to the launcher.
+5. Click **Hazard Mode**, beside the top-left handle, to outline detected edge
+   regions with contrast below **2:1** in red. Click again to hide the warnings.
+   Analysis uses the image after the selected color-vision simulation (or Original).
+6. Close the capture with its **×** control to return to the launcher.
 
 These simulations support visual inspection. They do not correct colors or predict
 exactly what an individual sees. See [the color-model documentation](docs/color-simulation.md)
@@ -54,7 +57,7 @@ matching Qt kit and build tool.
 | `captureflow.*` | Region selection, preview, movement, resizing, and simulation controls |
 | `desktopcapture.*` | Windows desktop capture worker and frame delivery |
 | `pixeltransform.*` | In-place sRGB color-vision simulation |
-| `edgedetection.*` | Standalone luminance-edge and local-contrast baseline |
+| `edgedetection.*` | Luminance baseline plus connected edge regions, median RGB samples, and contrast ratios |
 | `tests/` | Color, edge-analysis, capture-worker, and interaction checks |
 
 ## Capture performance and edge analysis
@@ -70,10 +73,17 @@ The preview displays completed frames during movement and resizing instead of
 discarding frames whose sampled position has just changed. A briefly delayed frame
 can appear while the next capture catches up to the current region.
 
-The [edge-analysis baseline](docs/edge-detection.md) computes luminance gradients
-and local contrast between opposing neighbors, reusing analysis storage. It is
-not connected to the live preview yet and adds no analysis cost to live capture.
-It does not provide a contrast-compliance verdict or an edge overlay UI.
+[Hazard analysis](docs/edge-detection.md) groups connected color boundaries into
+regions. Each region includes inclusive `startPixel` / `endPixel` bounds, two
+median RGB byte samples, and their luminance contrast ratio. Hazard Mode outlines
+regions below 2:1; it does not assign severity colors yet.
+
+Analysis runs on the capture worker after color simulation, at most ten times per
+second on a reduced image no larger than 640 x 360. Its buffers are reused, and
+region bounds are mapped back to the captured image. Turning Hazard Mode off skips
+this work. Warnings can lag changing content between analysis passes, and tiny
+features can disappear during reduction. The warnings are local image estimates,
+not a contrast-compliance verdict.
 
 ## Tests and development
 

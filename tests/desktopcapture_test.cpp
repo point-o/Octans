@@ -19,6 +19,7 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(!frames.isEmpty() || !failures.isEmpty(), 2000);
         QVERIFY2(failures.isEmpty(), failures.isEmpty() ? "" : qPrintable(failures.first().first().toString()));
         QTRY_COMPARE_WITH_TIMEOUT(frames.size(), 1, 2000);
+        QVERIFY(qvariant_cast<std::vector<EdgeDetection::Region>>(frames.first().at(2)).empty());
         QTest::qWait(100);
         QCOMPARE(frames.size(), 1); // No acknowledgement: no queued backlog.
         const QImage first = qvariant_cast<QImage>(frames.at(0).at(0));
@@ -77,6 +78,41 @@ private slots:
         capture.requestInterruption();
         QVERIFY(capture.wait(1000));
         QVERIFY(failures.isEmpty());
+#endif
+    }
+    void hazardAnnotationsMatchTransformedFrame()
+    {
+#ifndef Q_OS_WIN
+        QSKIP("Windows GDI capture test");
+#else
+        DesktopCapture capture;
+        QSignalSpy failures(&capture, &DesktopCapture::captureFailed);
+        QSignalSpy frames(&capture, &DesktopCapture::frameReady);
+        capture.setRegion(QRect(0, 0, 128, 128));
+        capture.setSimulationMode(PixelTransform::Mode::Tritanopia);
+        capture.setHazardEnabled(true);
+        capture.start();
+        QTRY_VERIFY_WITH_TIMEOUT(!frames.isEmpty() || !failures.isEmpty(), 2000);
+        QVERIFY2(failures.isEmpty(), failures.isEmpty() ? "" : qPrintable(failures.first().first().toString()));
+        QCOMPARE(frames.size(), 1);
+        EdgeDetection::RegionAnalyzer expected;
+        QVERIFY(expected.analyze(qvariant_cast<QImage>(frames.first().at(0))));
+        const auto actual = qvariant_cast<std::vector<EdgeDetection::Region>>(frames.first().at(2));
+        QCOMPARE(actual.size(), expected.regions().size());
+        for (size_t i = 0; i < actual.size(); ++i) {
+            QCOMPARE(actual[i].startPixel, expected.regions()[i].startPixel);
+            QCOMPARE(actual[i].endPixel, expected.regions()[i].endPixel);
+            QVERIFY(actual[i].color1 == expected.regions()[i].color1);
+            QVERIFY(actual[i].color2 == expected.regions()[i].color2);
+            QCOMPARE(actual[i].contrastRatio, expected.regions()[i].contrastRatio);
+        }
+        frames.clear();
+        capture.setHazardEnabled(false);
+        capture.acknowledgeFrame();
+        QTRY_COMPARE_WITH_TIMEOUT(frames.size(), 1, 2000);
+        QVERIFY(qvariant_cast<std::vector<EdgeDetection::Region>>(frames.first().at(2)).empty());
+        capture.requestInterruption();
+        QVERIFY(capture.wait(1000));
 #endif
     }
 };

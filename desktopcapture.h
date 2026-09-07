@@ -7,18 +7,23 @@
 #include <QWaitCondition>
 #include <atomic>
 #include "pixeltransform.h"
+#include "edgedetection.h"
+
+Q_DECLARE_METATYPE(std::vector<EdgeDetection::Region>)
 
 class DesktopCapture final : public QThread
 {
     Q_OBJECT
 public:
-    explicit DesktopCapture(QObject *parent = nullptr) : QThread(parent) {}
+    explicit DesktopCapture(QObject *parent = nullptr);
     ~DesktopCapture() override;
     void setRegion(const QRect &physicalRegion);
     void acknowledgeFrame();
-    void setSimulationMode(PixelTransform::Mode value) { mode.store(value); }
+    void setSimulationMode(PixelTransform::Mode value);
+    void setHazardEnabled(bool enabled);
 signals:
-    void frameReady(const QImage &image, const QRect &physicalRegion);
+    void frameReady(const QImage &image, const QRect &physicalRegion,
+                    const std::vector<EdgeDetection::Region> &regions);
     void captureFailed(const QString &message);
 protected:
     void run() override;
@@ -28,5 +33,7 @@ private:
     QRect region;
     std::atomic_bool pending{false};
     std::atomic<PixelTransform::Mode> mode{PixelTransform::Mode::Original};
+    std::atomic_bool hazardEnabled{false};
+    std::atomic<quint64> analysisRevision{0};
 };
 #endif
