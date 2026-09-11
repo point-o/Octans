@@ -133,10 +133,6 @@ void CaptureHandle::paintEvent(QPaintEvent *)
         p.drawText(rect(), Qt::AlignCenter, QString(QChar::fromLatin1(modeSpecs[static_cast<int>(currentMode)].letter)));
     } else {
         p.drawEllipse(center, 7, 7);
-        p.drawLine(center+QPointF(-11,0),center+QPointF(-5,0));
-        p.drawLine(center+QPointF(5,0),center+QPointF(11,0));
-        p.drawLine(center+QPointF(0,-11),center+QPointF(0,-5));
-        p.drawLine(center+QPointF(0,5),center+QPointF(0,11));
     }
     if (hasFocus()) {
         p.setPen(QPen(Qt::black, 2));
@@ -423,7 +419,7 @@ CapturePreview::CapturePreview(const QRect &region, QWidget *parent)
     handle->setAccessibleDescription(tr("Click to choose a color vision simulation. Drag to move. Arrow keys move when focused."));
 
     handle->setCursor(Qt::SizeAllCursor);
-    handle->setGeometry(0, 0, 44, 44);
+    handle->setGeometry(8, 8, 44, 44);
 handle->installEventFilter(this);
     modePopup = new ModePopup(controls);
     connect(modePopup, &ModePopup::modeChosen, this, [this](PixelTransform::Mode mode) {
@@ -465,7 +461,7 @@ handle->installEventFilter(this);
     hazardButton->setFocusPolicy(Qt::StrongFocus);
     hazardButton->setAccessibleName(tr("Hazard Mode"));
     hazardButton->setToolTip(tr("Outline detected edges with contrast below 2:1"));
-    hazardButton->setGeometry(48, 7, 136, 30);
+    hazardButton->setGeometry(56, 15, 136, 30);
     hazardButton->setStyleSheet(QStringLiteral("QPushButton { color: white; background: #252525; border: 1px solid white; border-radius: 6px; } QPushButton:checked { background: #9f2020; } QPushButton:focus { border: 2px solid #ffdf00; }"));
     connect(hazardButton, &QPushButton::toggled, this, [this](bool enabled) {
         hazardEnabled = enabled;

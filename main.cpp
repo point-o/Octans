@@ -2,11 +2,13 @@
 
 #include <QApplication>
 #include <QFontDatabase>
+#include <QIcon>
 
 // Application entry point.
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
+    a.setWindowIcon(QIcon(QStringLiteral(":/images/Octans.ico")));
     QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/SpaceGrotesk.ttf"));
     QFont launchFont = a.font();
     launchFont.setFamily(QStringLiteral("Space Grotesk"));

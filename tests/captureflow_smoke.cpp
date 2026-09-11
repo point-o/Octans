@@ -103,7 +103,7 @@ int main(int argc,char **argv) {
  check(preview->grab().toImage().pixelColor(100,100)==beforeMove.pixelColor(100,100));
  auto *controls=preview->findChild<QWidget *>("captureControls");
  check(controls->pos()==preview->pos()); check(!controls->mask().contains(QPoint(200,20)));
- check(handle->geometry()==QRect(0,0,44,44));
+ check(handle->geometry()==QRect(8,8,44,44));
  auto *resizeHandle=preview->findChild<QPushButton *>("captureResizeHandle"); check(resizeHandle);
  const QSize initialSize=preview->size();
  QTest::keyClick(resizeHandle,Qt::Key_Right); QTest::keyClick(resizeHandle,Qt::Key_Down);

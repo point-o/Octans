@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/images">
         <file alias="OctansLogo.png">res/OctansLogo.png</file>
+        <file alias="Octans.ico">res/Octans.ico</file>
     </qresource>
 </RCC>
