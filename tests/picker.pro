@@ -1,0 +1,9 @@
+QT += widgets testlib
+CONFIG += c++17 console testcase
+CONFIG -= app_bundle
+TARGET = picker-test
+INCLUDEPATH += ..
+SOURCES += picker_test.cpp ../captureflow.cpp ../desktopcapture.cpp ../pixeltransform.cpp ../edgedetection.cpp
+HEADERS += ../captureflow.h ../desktopcapture.h ../pixeltransform.h ../edgedetection.h
+RESOURCES += ../fonts.qrc
+win32: LIBS += -lgdi32 -luser32

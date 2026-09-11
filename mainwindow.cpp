@@ -39,9 +39,11 @@ protected:
         const QPixmap base = tintedPixmap();
         if (base.isNull())
             return;
-        const QSize target = size() * devicePixelRatioF();
-        if (render.size != target) {
+        const qreal displayRatio = devicePixelRatioF();
+        const QSize target = size() * displayRatio;
+        if (render.size != target || render.pixmap.devicePixelRatio() != displayRatio) {
             render.pixmap = base.scaled(target, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            render.pixmap.setDevicePixelRatio(displayRatio);
             render.size = target;
         }
         QPainter p(this);

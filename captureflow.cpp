@@ -5,6 +5,7 @@
 #include <QScreen>
 #include <QPainter>
 #include <QFontMetrics>
+#include <QTimer>
 #include <QMouseEvent>
 #include <QKeyEvent>
 #include <QCloseEvent>
@@ -14,6 +15,8 @@
 #include <QPushButton>
 #include <QRegion>
 #include <QPainterPath>
+#include <QVBoxLayout>
+#include <QAccessible>
 #include <algorithm>
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
@@ -66,178 +69,244 @@ struct ModeSpec {
     const char *objectName;
     const char *label;
     char letter;
+    const char *subtitle;
 };
 const ModeSpec modeSpecs[] = {
-    {PixelTransform::Mode::Protanopia, "modeProtanopia", "Protanopia", 'P'},
-    {PixelTransform::Mode::Deuteranopia, "modeDeuteranopia", "Deuteranopia", 'D'},
-    {PixelTransform::Mode::Tritanopia, "modeTritanopia", "Tritanopia", 'T'}
+    {PixelTransform::Mode::Original, "modeOriginal", "Original", 'O', "Unaltered colors"},
+    {PixelTransform::Mode::Protanopia, "modeProtanopia", "Protanopia", 'P', "Red-cone simulation"},
+    {PixelTransform::Mode::Deuteranopia, "modeDeuteranopia", "Deuteranopia", 'D', "Green-cone simulation"},
+    {PixelTransform::Mode::Tritanopia, "modeTritanopia", "Tritanopia", 'T', "Blue-cone simulation"}
 };
-constexpr int circleDiameter = 30;
-constexpr int circleGap = 6;
-constexpr int circleMargin = 4;
-constexpr int popupWidth = circleDiameter + 2 * circleMargin;
-constexpr int popupHeight = 3 * circleDiameter + 2 * circleGap + 2 * circleMargin;
+bool highContrast() {
+#ifdef Q_OS_WIN
+    HIGHCONTRAST info{};
+    info.cbSize = sizeof(info);
+    return SystemParametersInfo(SPI_GETHIGHCONTRAST, sizeof(info), &info, 0)
+        && (info.dwFlags & HCF_HIGHCONTRASTON);
+#else
+    return false;
+#endif
+}
+struct LensColors { QColor base, hover, text, secondary, accent; };
+LensColors lensColors(const QWidget *widget) {
+    const QPalette pal = widget->palette();
+    if (highContrast()) return {pal.color(QPalette::Window), pal.color(QPalette::Highlight),
+        pal.color(QPalette::WindowText), pal.color(QPalette::WindowText), pal.color(QPalette::WindowText)};
+    return {QColor("#171c24"), QColor("#303846"), QColor("#f7f8fa"), QColor("#bfc7d3"), QColor("#ffdf00")};
+}
 }
 
 CaptureHandle::CaptureHandle(QWidget *parent) : QPushButton(parent)
 {
     setAttribute(Qt::WA_Hover);
     setFocusPolicy(Qt::StrongFocus);
+    setMode(PixelTransform::Mode::Original);
+}
+void CaptureHandle::setMode(PixelTransform::Mode mode)
+{
+    if (static_cast<int>(mode) < 0 || static_cast<int>(mode) >= 4)
+        mode = PixelTransform::Mode::Original;
+    currentMode = mode;
+    const auto &spec = modeSpecs[static_cast<int>(mode)];
+    setAccessibleName(tr("Simulation: %1. Choose mode or drag to move.").arg(tr(spec.label)));
+    setToolTip(tr("%1 · Click to choose simulation; drag to move").arg(tr(spec.label)));
+    update();
 }
 void CaptureHandle::paintEvent(QPaintEvent *)
 {
+    const auto colors = lensColors(this);
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
-    p.setPen(QPen(Qt::black, 1.5));
-    p.setBrush(isDown() ? QColor(210, 210, 210) : underMouse() ? QColor(240, 240, 240) : QColor(Qt::white));
-    p.drawEllipse(rect().center(), 14, 14);
-    if (currentMode != PixelTransform::Mode::Original) {
-        QFont onFont = QApplication::font();
-        onFont.setBold(true);
-        onFont.setPixelSize(10);
-        const QString text = QStringLiteral("ON");
-        const QRect box = QFontMetrics(onFont).tightBoundingRect(text);
-        const qreal cx = width() / 2.0;
-        const qreal cy = height() / 2.0;
-        p.setFont(onFont);
-        p.setPen(QPen(Qt::black));
-        p.drawText(QPointF(cx - box.width() / 2.0 - box.left(), cy - box.height() / 2.0 - box.top()), text);
+    const QPointF center(width()/2.0, height()/2.0);
+    const bool on = currentMode != PixelTransform::Mode::Original;
+    const bool highlighted = underMouse() || isDown();
+    const QColor foreground = highContrast() && highlighted ? palette().color(QPalette::HighlightedText) : colors.text;
+    const QColor ring = highContrast() ? foreground : (on ? colors.accent : colors.secondary);
+    p.setPen(QPen(ring, on ? 2.5 : 1.5));
+    p.setBrush(underMouse() || isDown() ? colors.hover : colors.base);
+    p.drawEllipse(center, 17, 17);
+    p.setPen(QPen(foreground, 1.5));
+    p.setBrush(Qt::NoBrush);
+    if (on) {
+        QFont labelFont = font(); labelFont.setBold(true); labelFont.setPixelSize(18);
+        p.setFont(labelFont);
+        p.drawText(rect(), Qt::AlignCenter, QString(QChar::fromLatin1(modeSpecs[static_cast<int>(currentMode)].letter)));
+    } else {
+        p.drawEllipse(center, 7, 7);
+        p.drawLine(center+QPointF(-11,0),center+QPointF(-5,0));
+        p.drawLine(center+QPointF(5,0),center+QPointF(11,0));
+        p.drawLine(center+QPointF(0,-11),center+QPointF(0,-5));
+        p.drawLine(center+QPointF(0,5),center+QPointF(0,11));
     }
     if (hasFocus()) {
-        p.setBrush(Qt::NoBrush);
-        p.setPen(QPen(Qt::black, 1, Qt::DotLine));
-        p.drawEllipse(rect().center(), 11, 11);
+        p.setPen(QPen(Qt::black, 2));
+        p.drawEllipse(center, 20, 20);
+        p.setPen(QPen(Qt::white, 2));
+        p.drawEllipse(center, 18, 18);
     }
 }
 ModeCircleButton::ModeCircleButton(QWidget *parent) : QPushButton(parent)
 {
     setAttribute(Qt::WA_Hover);
     setFocusPolicy(Qt::StrongFocus);
+    setCheckable(true);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 }
-void ModeCircleButton::setCircle(int diameter, char letter, PixelTransform::Mode mode,
+void ModeCircleButton::setCircle(int, char letter, PixelTransform::Mode mode,
                                  const QString &name, const QString &tip)
 {
-    setFixedSize(diameter, diameter);
     this->letter = QChar::fromLatin1(letter);
-    this->mode_ = mode;
+    mode_ = mode;
+    subtitle = tip;
+    setText(name);
     setAccessibleName(name);
+    setAccessibleDescription(tip);
     setToolTip(tip);
+    updateGeometry();
+}
+QSize ModeCircleButton::sizeHint() const
+{
+    QFont titleFont = font(); titleFont.setBold(true);
+    const QFontMetrics titleMetrics(titleFont), metrics(font());
+    const int line = metrics.height();
+    return QSize(qMax(titleMetrics.horizontalAdvance(text()), metrics.horizontalAdvance(subtitle)) + line*3 + 60,
+                 qMax(44, titleMetrics.height()+line+24));
 }
 void ModeCircleButton::paintEvent(QPaintEvent *)
 {
-    QPainter p(this);
-    p.setRenderHint(QPainter::Antialiasing);
-    const QColor fill = active ? QColor(Qt::white)
-        : isDown() ? QColor(90, 90, 90) : underMouse() ? QColor(70, 70, 70) : QColor(42, 42, 42);
-    const QColor letterColor = active ? QColor(Qt::black) : QColor(Qt::white);
-    const QColor ring = active ? QColor(Qt::black) : QColor(Qt::white);
-    const qreal radius = width() / 2.0 - 1.0;
-    const QPointF center = QRectF(rect()).center();
-    p.setPen(QPen(ring, 2));
-    p.setBrush(fill);
-    p.drawEllipse(center, radius, radius);
-    QFont font = QApplication::font();
-    font.setBold(true);
-    font.setPixelSize(qRound(width() * 0.6));
-    p.setFont(font);
-    p.setPen(QPen(letterColor));
-    p.drawText(rect(), Qt::AlignCenter, QString(letter));
+    const auto colors = lensColors(this);
+    const bool highlighted = isChecked() || underMouse() || isDown();
+    QPainter p(this); p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(Qt::NoPen); p.setBrush(highlighted ? colors.hover : colors.base);
+    p.drawRoundedRect(QRectF(rect()).adjusted(1,1,-1,-1), 8, 8);
+    const QColor foreground = highContrast() && highlighted ? palette().color(QPalette::HighlightedText) : colors.text;
+    const int line = fontMetrics().height();
+    const int badge = qMax(28, line+8);
+    const QRect badgeRect(12, (height()-badge)/2, badge, badge);
+    p.setPen(QPen(isChecked() ? (highContrast() ? foreground : colors.accent) : colors.secondary, isChecked() ? 2 : 1));
+    p.setBrush(Qt::NoBrush); p.drawEllipse(badgeRect);
+    QFont titleFont = font(); titleFont.setBold(true); p.setFont(titleFont); p.setPen(foreground);
+    p.drawText(badgeRect, Qt::AlignCenter, QString(letter));
+    const int textX = badgeRect.right()+13;
+    const int textY = (height()-QFontMetrics(titleFont).height()-line)/2;
+    p.drawText(QRect(textX,textY,width()-textX-line-24,QFontMetrics(titleFont).height()),Qt::AlignLeft|Qt::AlignVCenter,text());
+    p.setFont(font()); p.setPen(highContrast() ? foreground : colors.secondary);
+    p.drawText(QRect(textX,textY+QFontMetrics(titleFont).height(),width()-textX-line-24,line),Qt::AlignLeft|Qt::AlignVCenter,subtitle);
+    if (isChecked()) {
+        p.setPen(QPen(highContrast() ? foreground : colors.accent,2,Qt::SolidLine,Qt::RoundCap));
+        const QPointF c(width()-18,height()/2.0);
+        p.drawLine(c+QPointF(-5,0),c+QPointF(-1,4)); p.drawLine(c+QPointF(-1,4),c+QPointF(6,-4));
+    }
     if (hasFocus()) {
-        p.setPen(QPen(Qt::white, 1, Qt::DotLine));
-        p.setBrush(Qt::NoBrush);
-        p.drawEllipse(center, radius - 3.0, radius - 3.0);
+        p.setBrush(Qt::NoBrush); p.setPen(QPen(foreground,2));
+        p.drawRoundedRect(QRectF(rect()).adjusted(3,3,-3,-3),6,6);
     }
 }
 ModePopup::ModePopup(QWidget *parent)
     : QWidget(parent, Qt::Popup | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint)
 {
     setObjectName(QStringLiteral("simulationMenu"));
+    setAccessibleName(tr("Color vision simulation"));
     setAttribute(Qt::WA_TranslucentBackground);
-    for (int i = 0; i < 3; ++i) {
-        const ModeSpec &spec = modeSpecs[i];
+    auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(8,8,8,8); layout->setSpacing(4);
+    for (int i = 0; i < 4; ++i) {
+        const auto &spec = modeSpecs[i];
         auto *button = new ModeCircleButton(this);
         button->setObjectName(QLatin1String(spec.objectName));
-        button->setGeometry(circleMargin, circleMargin + i * (circleDiameter + circleGap),
-                            circleDiameter, circleDiameter);
-        button->setCircle(circleDiameter, spec.letter, spec.mode,
-                          tr(spec.label), tr(spec.label));
-        connect(button, &QPushButton::clicked, this, [this, button] { chooseFrom(button); });
-        circles[i] = button;
+        button->setCircle(44,spec.letter,spec.mode,tr(spec.label),tr(spec.subtitle));
+        button->installEventFilter(this);
+        connect(button,&QPushButton::clicked,this,[this,button] { chooseFrom(button); });
+        layout->addWidget(button); circles[i] = button;
+        if(i) setTabOrder(circles[i-1],button);
     }
-    resize(popupWidth, popupHeight);
-    QRegion mask;
-    for (auto *button : circles)
-        mask = mask.united(QRegion(button->geometry()));
-    setMask(mask);
+    layout->setSizeConstraint(QLayout::SetFixedSize);
+    setMode(PixelTransform::Mode::Original);
+}
+void ModePopup::paintEvent(QPaintEvent *)
+{
+    const auto colors = lensColors(this);
+    QPainter p(this); p.setRenderHint(QPainter::Antialiasing);
+    p.setBrush(colors.base); p.setPen(QPen(colors.secondary,1));
+    p.drawRoundedRect(QRectF(rect()).adjusted(0.5,0.5,-0.5,-0.5),12,12);
+}
+void ModePopup::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    for (auto *button : circles) if(button->mode()==currentMode) button->setFocus(Qt::PopupFocusReason);
 }
 void ModePopup::setMode(PixelTransform::Mode mode)
 {
+    if (static_cast<int>(mode) < 0 || static_cast<int>(mode) >= 4)
+        mode = PixelTransform::Mode::Original;
     currentMode = mode;
-    for (auto *button : circles)
-        button->setActive(button->mode() == mode);
+    for (auto *button : circles) button->setActive(button->mode()==mode);
+    layout()->activate(); adjustSize();
 }
-void ModePopup::dismissAsSelf()
-{
-    closingSelf = true;
-    externallyClosed = false;
-}
-void ModePopup::closeFromToggle()
-{
-    dismissAsSelf();
-    close();
-}
+void ModePopup::dismissAsSelf() { closingSelf = true; externallyClosed = false; }
+void ModePopup::closeFromToggle() { dismissAsSelf(); close(); }
 bool ModePopup::consumeExternalDismissal()
 {
-    if (externallyClosed && externalTimer.isValid() && externalTimer.elapsed() < 400) {
-        externallyClosed = false;
-        return true;
+    if (externallyClosed && externalTimer.isValid() && externalTimer.elapsed()<400) {
+        externallyClosed=false; return true;
     }
-    externallyClosed = false;
-    return false;
+    externallyClosed=false; return false;
 }
 void ModePopup::hideEvent(QHideEvent *event)
 {
-    if (!closingSelf) {
-        externallyClosed = true;
-        externalTimer.restart();
+    if (!closingSelf) { externallyClosed=true; externalTimer.restart(); }
+    else if (parentWidget()) {
+        if(auto *handle=parentWidget()->findChild<CaptureHandle *>(QStringLiteral("captureHandle")))
+            QTimer::singleShot(0, handle, [handle] {
+                handle->window()->activateWindow();
+                handle->setFocus(Qt::PopupFocusReason);
+            });
     }
-    closingSelf = false;
+    closingSelf=false;
     QWidget::hideEvent(event);
 }
 void ModePopup::chooseFrom(ModeCircleButton *button)
 {
-    const PixelTransform::Mode chosen = button ? button->mode() : PixelTransform::Mode::Original;
-    emit modeChosen(chosen == currentMode ? PixelTransform::Mode::Original : chosen);
-    dismissAsSelf();
-    close();
+    const auto chosen=button ? button->mode() : PixelTransform::Mode::Original;
+    const auto resolved = chosen==currentMode ? PixelTransform::Mode::Original : chosen;
+    setMode(resolved);
+    emit modeChosen(resolved);
+    dismissAsSelf(); close();
 }
 void ModePopup::moveFocus(int step)
 {
-    QWidget *focused = focusWidget();
-    int index = -1;
-    for (int i = 0; i < 3; ++i)
-        if (circles[i] == focused) { index = i; break; }
-    if (index < 0) { circles[0]->setFocus(); return; }
-    circles[(index + step + 3) % 3]->setFocus();
+    int index=-1;
+    for(int i=0;i<4;++i) if(circles[i]==focusWidget()) { index=i; break; }
+    circles[index<0 ? 0 : (index+step+4)%4]->setFocus(Qt::TabFocusReason);
+}
+bool ModePopup::eventFilter(QObject *, QEvent *event)
+{
+    if(event->type()==QEvent::KeyPress) {
+        auto *key=static_cast<QKeyEvent *>(event);
+        switch(key->key()) {
+        case Qt::Key_Up: case Qt::Key_Down: case Qt::Key_Left: case Qt::Key_Right:
+        case Qt::Key_Home: case Qt::Key_End: case Qt::Key_Return: case Qt::Key_Enter:
+        case Qt::Key_Space: case Qt::Key_Escape: case Qt::Key_Tab: case Qt::Key_Backtab:
+            keyPressEvent(key); return true;
+        }
+    }
+    return false;
 }
 void ModePopup::keyPressEvent(QKeyEvent *event)
 {
-    switch (event->key()) {
+    switch(event->key()) {
     case Qt::Key_Escape: dismissAsSelf(); close(); return;
-    case Qt::Key_Return:
-    case Qt::Key_Enter: {
-        auto *focused = qobject_cast<ModeCircleButton *>(focusWidget());
-        if (focused) chooseFrom(focused);
+    case Qt::Key_Return: case Qt::Key_Enter: case Qt::Key_Space:
+        if(auto *button=qobject_cast<ModeCircleButton *>(focusWidget())) button->click();
         return;
-    }
-    case Qt::Key_Up:
-    case Qt::Key_Left: moveFocus(-1); return;
-    case Qt::Key_Down:
-    case Qt::Key_Right: moveFocus(1); return;
+    case Qt::Key_Home: circles[0]->setFocus(); return;
+    case Qt::Key_End: circles[3]->setFocus(); return;
+    case Qt::Key_Up: case Qt::Key_Left: case Qt::Key_Backtab: moveFocus(-1); return;
+    case Qt::Key_Down: case Qt::Key_Right: moveFocus(1); return;
+    case Qt::Key_Tab: moveFocus(event->modifiers()&Qt::ShiftModifier ? -1 : 1); return;
     default: QWidget::keyPressEvent(event);
     }
 }
-
 CaptureSelector::CaptureSelector(QWidget *parent)
     : QWidget(parent, Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint)
 {
@@ -350,9 +419,9 @@ CapturePreview::CapturePreview(const QRect &region, QWidget *parent)
     controls->setAttribute(Qt::WA_ShowWithoutActivating);
     handle = new CaptureHandle(controls);
     handle->setObjectName(QStringLiteral("captureHandle"));
-    handle->setAccessibleName(tr("Capture controls"));
+    handle->setMode(PixelTransform::Mode::Original);
     handle->setAccessibleDescription(tr("Click to choose a color vision simulation. Drag to move. Arrow keys move when focused."));
-    handle->setToolTip(tr("Click for simulation; drag to move"));
+
     handle->setCursor(Qt::SizeAllCursor);
     handle->setGeometry(0, 0, 44, 44);
 handle->installEventFilter(this);
@@ -370,7 +439,6 @@ handle->installEventFilter(this);
 #endif
             modePopup->setMode(simulationMode);
             QPoint position = handle->mapToGlobal(QPoint(0, handle->height() + 2));
-            position.rx() += (handle->width() - modePopup->width()) / 2;
             const QScreen *screen = QGuiApplication::screenAt(position);
             const QRect area = screen ? screen->availableGeometry()
                                       : QGuiApplication::primaryScreen()->geometry();
@@ -428,7 +496,9 @@ handle->installEventFilter(this);
         });
     }
     // Clicking toggles Hazard Mode; right-click picks the alarm threshold.
-    hazardButton->setToolTip(tr("Outline detected edges with contrast below the alarm level. Right-click to choose the level."));
+    hazardButton->setToolTip(tr("Outline detected edges with contrast below the alarm level. Right-click, Menu key, or Shift+F10 to choose the level."));
+    hazardButton->setAccessibleDescription(hazardButton->toolTip());
+    hazardButton->installEventFilter(this);
     hazardButton->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(hazardButton, &QPushButton::customContextMenuRequested, this, [this](const QPoint &pos) {
         hazardMenu->popup(hazardButton->mapToGlobal(pos));
@@ -565,6 +635,10 @@ void CapturePreview::showEvent(QShowEvent *event)
     positionControls();
     controls->show();
     controls->raise();
+    if (!capture) {
+        controls->activateWindow();
+        handle->setFocus(Qt::OtherFocusReason);
+    }
     if (!capture && QGuiApplication::platformName() == QStringLiteral("windows")) {
 #ifdef Q_OS_WIN
         // Exclude both top-level windows before starting, or never capture at all.
@@ -573,6 +647,10 @@ void CapturePreview::showEvent(QShowEvent *event)
             || !SetWindowDisplayAffinity(reinterpret_cast<HWND>(controls->winId()), excludeFromCapture)) {
             captureError = tr("Windows could not exclude Octans from capture. Capture stopped to prevent feedback.");
             setAccessibleDescription(captureError);
+            handle->setAccessibleDescription(captureError);
+            controls->setAccessibleDescription(captureError);
+            QAccessibleEvent accessibleError(handle, QAccessible::DescriptionChanged);
+            QAccessible::updateAccessibility(&accessibleError);
             update();
             return;
         }
@@ -581,6 +659,10 @@ void CapturePreview::showEvent(QShowEvent *event)
         connect(capture, &DesktopCapture::captureFailed, this, [this](const QString &error) {
             captureError = error; frame = QImage();
             setAccessibleDescription(error); update();
+            handle->setAccessibleDescription(error);
+            controls->setAccessibleDescription(error);
+            QAccessibleEvent accessibleError(handle, QAccessible::DescriptionChanged);
+            QAccessible::updateAccessibility(&accessibleError);
         });
         capture->setRegion(physicalRegion());
         capture->setSimulationMode(simulationMode);
@@ -610,6 +692,13 @@ void CapturePreview::hideEvent(QHideEvent *event)
 }
 bool CapturePreview::eventFilter(QObject *object, QEvent *event)
 {
+    if (object == hazardButton && event->type() == QEvent::KeyPress) {
+        const auto *key = static_cast<QKeyEvent *>(event);
+        if (key->key() == Qt::Key_Menu || (key->key() == Qt::Key_F10 && (key->modifiers() & Qt::ShiftModifier))) {
+            hazardMenu->popup(hazardButton->mapToGlobal(QPoint(0,hazardButton->height())));
+            return true;
+        }
+    }
     if (object == resizeHandle) {
         if (event->type() == QEvent::MouseButtonPress) {
             auto *mouse = static_cast<QMouseEvent *>(event);

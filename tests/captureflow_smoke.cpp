@@ -156,10 +156,11 @@ EdgeDetection::Region low; low.startPixel=QPoint(20,60); low.endPixel=QPoint(59,
   // Preset menu is exclusive and pushes the alarm threshold into paint.
   auto *hazardMenu=preview->findChild<QMenu*>("hazardThresholdMenu");
   check(hazardMenu && hazardMenu->actions().size()==3);
-  const auto active=std::find_if(hazardMenu->actions().begin(),hazardMenu->actions().end(),
+  const auto thresholdActions = hazardMenu->actions();
+  const auto active=std::find_if(thresholdActions.begin(),thresholdActions.end(),
       [](const QAction *action){ return action->isChecked(); });
-  check(active!=hazardMenu->actions().end() && (*active)->data().toDouble()==2.0);
-  for (auto *action : hazardMenu->actions()) {
+  check(active!=thresholdActions.end() && (*active)->data().toDouble()==2.0);
+  for (auto *action : thresholdActions) {
       action->trigger();
       check(preview->alarmThreshold()==float(action->data().toDouble()));
   }

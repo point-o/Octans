@@ -12,9 +12,11 @@ Space Grotesk font. Windows high-contrast colors are respected by the launcher.
 1. Click **Capture**, then drag to select a screen region. Press **Escape** to cancel.
    You can also use arrow keys to create or move a selection, **Shift + arrow keys**
    to resize it, and **Enter** to confirm.
-2. Click the overlay's handle to open the **P / D / T** simulation picker:
-   Protanopia, Deuteranopia, or Tritanopia. Click the active mode again to return to
-   Original. The picker supports arrow-key navigation and keyboard activation.
+2. Click the circular handle to open the simulation panel: **Original**,
+   **Protanopia**, **Deuteranopia**, or **Tritanopia**. An active simulation shows
+   P, D, or T in the handle. Select Original or click the active mode again to
+   reset. Use arrows or Tab to navigate, Enter/Space to choose, and Escape to
+   dismiss. Home/End jump to the first/last mode.
 3. Drag the handle to move the viewing region. Arrow keys move it when the handle
    has focus.
 4. Drag the bottom-right resize grip to resize the live view. When that grip has

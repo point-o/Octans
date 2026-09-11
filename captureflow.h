@@ -18,7 +18,7 @@ class CaptureHandle final : public QPushButton
     Q_OBJECT
 public:
     explicit CaptureHandle(QWidget *parent = nullptr);
-    void setMode(PixelTransform::Mode mode) { currentMode = mode; update(); }
+    void setMode(PixelTransform::Mode mode);
     PixelTransform::Mode mode() const { return currentMode; }
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -33,14 +33,15 @@ public:
     explicit ModeCircleButton(QWidget *parent = nullptr);
     void setCircle(int diameter, char letter, PixelTransform::Mode mode,
                    const QString &name, const QString &tip);
-    void setActive(bool value) { active = value; update(); }
+    void setActive(bool value) { setChecked(value); update(); }
+    QSize sizeHint() const override;
     PixelTransform::Mode mode() const { return mode_; }
 protected:
     void paintEvent(QPaintEvent *) override;
 private:
     QChar letter;
     PixelTransform::Mode mode_ = PixelTransform::Mode::Original;
-    bool active = false;
+    QString subtitle;
 };
 
 class ModePopup final : public QWidget
@@ -56,12 +57,15 @@ signals:
 protected:
     void keyPressEvent(QKeyEvent *event) override;
     void hideEvent(QHideEvent *event) override;
+    void showEvent(QShowEvent *event) override;
+    void paintEvent(QPaintEvent *) override;
+    bool eventFilter(QObject *, QEvent *) override;
 private:
     void dismissAsSelf();
     void chooseFrom(ModeCircleButton *button);
     void moveFocus(int step);
     PixelTransform::Mode currentMode = PixelTransform::Mode::Original;
-    ModeCircleButton *circles[3] = {nullptr, nullptr, nullptr};
+    ModeCircleButton *circles[4] = {nullptr, nullptr, nullptr, nullptr};
     bool closingSelf = false;
     bool externallyClosed = false;
     QElapsedTimer externalTimer;

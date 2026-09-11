@@ -19,6 +19,7 @@ Use the same pattern with the following projects and executables:
 | `edgedetection.pro` | `edgedetection-test` | Uniform fields, known edges, orientations, raw medians, stride, buffer reuse, reliability classification, severity classifier, CPU benchmark |
 | `desktopcapture.pro` | `desktopcapture_test` | Windows GDI worker, acknowledgement backpressure, retained-frame safety, pool exhaustion/recovery, storage reuse, resizing |
 | `captureflow.pro` | `captureflow-smoke` | Selection, launcher restoration, picker, movement, resizing, input transparency, preview close |
+| `picker.pro` | `picker-test` | Accessible selection states, 44px targets, keyboard navigation, focus return, enlarged font layout, rendered panel images |
 | `capture_pipeline_benchmark.pro` | `capture_pipeline_benchmark` | Preallocated copy-plus-transform timings, with a storage-reuse check |
 
 The Qt Test executables support `-o results.txt,txt` to save results. The capture
